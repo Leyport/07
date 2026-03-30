@@ -198,6 +198,14 @@ export class HomeComponent {
       icon: '💡',
       color: '#FF9800',
       gradient: 'linear-gradient(135deg, #FF9800, #FFC107)'
+    },
+    {
+      route: '/photos',
+      title: 'Photos',
+      subtitle: 'Shared photos and videos of the house',
+      icon: '📸',
+      color: '#9333ea',
+      gradient: 'linear-gradient(135deg, #9333ea, #a855f7)'
     }
   ];
 }

@@ -1,5 +1,5 @@
 export type MediaType = 'image' | 'video';
-export type SectionType = 'opening' | 'closing' | 'tips';
+export type SectionType = 'opening' | 'closing' | 'tips' | 'photos';
 
 export interface MediaItem {
   id: string;

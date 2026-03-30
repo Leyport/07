@@ -18,6 +18,7 @@ import { AuthService } from './core/services/auth.service';
           <a routerLink="/opening" routerLinkActive="active">Opening</a>
           <a routerLink="/closing" routerLinkActive="active">Closing</a>
           <a routerLink="/tips" routerLinkActive="active">Tips</a>
+          <a routerLink="/photos" routerLinkActive="active">Photos</a>
         </nav>
         <div class="auth-area">
           @if (!auth.loading()) {

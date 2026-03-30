@@ -20,5 +20,9 @@ export const routes: Routes = [
     loadComponent: () => import('./features/section/section.component').then(m => m.SectionComponent),
     data: { section: 'tips', title: 'General Tips', icon: '💡', color: '#FF9800' }
   },
+  {
+    path: 'photos',
+    loadComponent: () => import('./features/photos/photos.component').then(m => m.PhotosComponent)
+  },
   { path: '**', redirectTo: '' }
 ];
