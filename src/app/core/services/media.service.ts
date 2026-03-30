@@ -60,7 +60,9 @@ export class MediaService {
     file: File,
     section: SectionType,
     title: string,
-    description: string
+    description: string,
+    uploadedBy?: string,
+    photoDate?: Date
   ): Observable<UploadProgress> {
     return new Observable(observer => {
       const ext = file.name.split('.').pop();
@@ -102,6 +104,8 @@ export class MediaService {
               url,
               storagePath,
               uploadedAt: new Date(),
+              ...(uploadedBy ? { uploadedBy } : {}),
+              ...(photoDate ? { photoDate } : {}),
               order: existing.size
             });
 

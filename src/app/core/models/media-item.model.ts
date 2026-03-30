@@ -11,5 +11,7 @@ export interface MediaItem {
   thumbnailUrl?: string;
   storagePath: string;
   uploadedAt: Date;
+  uploadedBy?: string;
+  photoDate?: Date;
   order: number;
 }

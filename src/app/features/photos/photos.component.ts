@@ -1,5 +1,5 @@
 import { Component, inject, signal, computed, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { DatePipe } from '@angular/common';
 import { MediaService } from '../../core/services/media.service';
 import { AuthService } from '../../core/services/auth.service';
 import { MediaItem } from '../../core/models/media-item.model';
@@ -7,7 +7,7 @@ import { MediaItem } from '../../core/models/media-item.model';
 @Component({
   selector: 'app-photos',
   standalone: true,
-  imports: [CommonModule],
+  imports: [DatePipe],
   template: `
     <div class="photos-page">
 
@@ -102,6 +102,27 @@ import { MediaItem } from '../../core/models/media-item.model';
                 }
                 <div class="media-badge">{{ item.type === 'video' ? '🎥' : '📷' }}</div>
               </div>
+
+              <!-- Hover metadata panel -->
+              <div class="photo-meta">
+                @if (item.photoDate) {
+                  <div class="meta-row">
+                    <span class="meta-label">Taken</span>
+                    <span class="meta-value">{{ item.photoDate | date:'d MMM yyyy' }}</span>
+                  </div>
+                }
+                <div class="meta-row">
+                  <span class="meta-label">Uploaded</span>
+                  <span class="meta-value">{{ item.uploadedAt | date:'d MMM yyyy' }}</span>
+                </div>
+                @if (item.uploadedBy) {
+                  <div class="meta-row">
+                    <span class="meta-label">By</span>
+                    <span class="meta-value">{{ item.uploadedBy }}</span>
+                  </div>
+                }
+              </div>
+
               @if (item.description || auth.user()) {
                 <div class="photo-info">
                   @if (editingId() === item.id) {
@@ -384,6 +405,46 @@ import { MediaItem } from '../../core/models/media-item.model';
       font-size: 0.75rem;
     }
 
+    /* Hover metadata panel */
+    .photo-meta {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.25s ease, padding 0.25s ease;
+      background: var(--hover);
+      border-top: 1px solid transparent;
+      padding: 0 0.875rem;
+    }
+
+    .photo-card:hover .photo-meta {
+      max-height: 120px;
+      padding: 0.6rem 0.875rem;
+      border-top-color: var(--border);
+    }
+
+    .meta-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: baseline;
+      line-height: 1.6;
+    }
+
+    .meta-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      flex: 0 0 52px;
+    }
+
+    .meta-value {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     .photo-info { padding: 0.75rem; }
 
     .photo-desc {
@@ -568,16 +629,25 @@ export class PhotosComponent implements OnInit {
     this.uploadError.set('');
   }
 
-  submitUpload() {
+  async submitUpload() {
     const file = this.selectedFile();
     if (!file) return;
 
     const description = this.uploadDescription().trim();
-    // Use filename (without extension) as title, description as the caption
     const title = file.name.replace(/\.[^.]+$/, '');
+    const uploadedBy = this.auth.user()?.displayName || this.auth.user()?.email || undefined;
+
+    let photoDate: Date | undefined;
+    try {
+      const exifr = await import('exifr');
+      const exif = await exifr.parse(file, ['DateTimeOriginal', 'CreateDate']);
+      photoDate = exif?.DateTimeOriginal ?? exif?.CreateDate ?? undefined;
+    } catch {
+      // EXIF not available — leave photoDate undefined
+    }
 
     this.uploadError.set('');
-    this.mediaService.uploadMedia(file, 'photos', title, description)
+    this.mediaService.uploadMedia(file, 'photos', title, description, uploadedBy, photoDate)
       .subscribe({
         next: result => {
           if (result.error) {
