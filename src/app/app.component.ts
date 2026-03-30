@@ -11,8 +11,8 @@ import { buildInfo } from './build-info';
     <div class="app-shell">
       <header class="app-header">
         <a routerLink="/" class="brand">
-          <span class="brand-flag">🇫🇷</span>
-          <span class="brand-name">Maison de France</span>
+          <img src="favicon.ico" class="brand-favicon" alt="07 Leyport" />
+          <span class="brand-name">07 Leyport</span>
         </a>
         <nav class="app-nav">
           <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact:true}">Home</a>
@@ -83,7 +83,12 @@ import { buildInfo } from './build-info';
       color: var(--text-primary);
     }
 
-    .brand-flag { font-size: 1.6rem; }
+    .brand-favicon {
+      width: 28px;
+      height: 28px;
+      border-radius: 4px;
+      object-fit: cover;
+    }
 
     .brand-name {
       font-family: 'Playfair Display', Georgia, serif;
