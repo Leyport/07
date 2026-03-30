@@ -32,40 +32,51 @@ import { MediaItem } from '../../core/models/media-item.model';
           @if (!showUploadForm()) {
             <div class="upload-prompt" (click)="showUploadForm.set(true)">
               <div class="upload-icon">📎</div>
-              <p class="upload-text">Click to add a photo or video</p>
+              <p class="upload-text">Click to add photos or videos</p>
               <p class="upload-hint">or drag and drop here</p>
             </div>
           } @else {
             <div class="upload-form">
-              <h3 class="form-title">Add photo or video</h3>
+              <h3 class="form-title">Add photos or videos</h3>
               <div class="form-group">
-                <label>Description</label>
+                <label>Description <span class="label-hint">(applied to all)</span></label>
                 <textarea [value]="uploadDescription()" (input)="uploadDescription.set($any($event.target).value)"
-                  placeholder="What's this a photo of?" class="form-input" rows="3"></textarea>
+                  placeholder="What are these photos of?" class="form-input" rows="2"></textarea>
               </div>
               <div class="form-group">
-                <label>File</label>
-                <div class="file-drop" [class.has-file]="selectedFile()" (click)="fileInput.click()">
-                  @if (selectedFile()) {
-                    <span>✅ {{ selectedFile()!.name }}</span>
+                <label>Files</label>
+                <div class="file-drop" [class.has-file]="selectedFiles().length > 0" (click)="fileInput.click()">
+                  @if (selectedFiles().length > 0) {
+                    <span>✅ {{ selectedFiles().length }} file{{ selectedFiles().length !== 1 ? 's' : '' }} selected</span>
                   } @else {
-                    <span>📁 Choose photo or video...</span>
+                    <span>📁 Choose photos or videos…</span>
                   }
-                  <input #fileInput type="file" accept="image/*,video/*" (change)="onFileSelected($event)" hidden />
+                  <input #fileInput type="file" accept="image/*,video/*" multiple (change)="onFileSelected($event)" hidden />
                 </div>
+                @if (selectedFiles().length > 1) {
+                  <ul class="file-list">
+                    @for (f of selectedFiles(); track f.name) {
+                      <li>{{ f.name }}</li>
+                    }
+                  </ul>
+                }
               </div>
               @if (mediaService.uploading()) {
                 <div class="progress-bar">
                   <div class="progress-fill" [style.width.%]="mediaService.uploadProgress()"></div>
                 </div>
-                <p class="progress-text">Uploading… {{ mediaService.uploadProgress() }}%</p>
+                <p class="progress-text">
+                  Uploading {{ uploadingIndex() + 1 }} of {{ selectedFiles().length }}… {{ mediaService.uploadProgress() }}%
+                </p>
               }
               @if (uploadError()) {
                 <p class="error-text">{{ uploadError() }}</p>
               }
               <div class="form-actions">
                 <button class="btn-secondary" (click)="cancelUpload()">Cancel</button>
-                <button class="btn-primary" (click)="submitUpload()" [disabled]="!canSubmit()">Upload</button>
+                <button class="btn-primary" (click)="submitUpload()" [disabled]="!canSubmit()">
+                  Upload {{ selectedFiles().length > 1 ? selectedFiles().length + ' files' : '' }}
+                </button>
               </div>
             </div>
           }
@@ -282,6 +293,28 @@ import { MediaItem } from '../../core/models/media-item.model';
 
     .file-drop:hover { border-color: #9333ea; }
     .file-drop.has-file { color: var(--text-primary); border-color: #9333ea; }
+
+    .label-hint { font-weight: 400; color: var(--text-muted); font-size: 0.8rem; }
+
+    .file-list {
+      margin: 0.4rem 0 0;
+      padding: 0.5rem 0.75rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      list-style: none;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .file-list li {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      padding: 0.15rem 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
 
     .progress-bar { height: 6px; background: var(--border); border-radius: 3px; margin: 1rem 0 0.25rem; overflow: hidden; }
     .progress-fill { height: 100%; background: #9333ea; border-radius: 3px; transition: width 0.3s; }
@@ -649,7 +682,8 @@ export class PhotosComponent implements OnInit {
   mediaItems = signal<MediaItem[]>([]);
   showUploadForm = signal(false);
   isDragging = signal(false);
-  selectedFile = signal<File | null>(null);
+  selectedFiles = signal<File[]>([]);
+  uploadingIndex = signal(0);
   lightboxIndex = signal<number | null>(null);
   lightboxItem = computed(() => {
     const i = this.lightboxIndex();
@@ -673,7 +707,7 @@ export class PhotosComponent implements OnInit {
   }
 
   canSubmit = computed(() =>
-    this.selectedFile() !== null && !this.mediaService.uploading()
+    this.selectedFiles().length > 0 && !this.mediaService.uploading()
   );
 
   ngOnInit() {
@@ -690,54 +724,60 @@ export class PhotosComponent implements OnInit {
   onDrop(event: DragEvent) {
     event.preventDefault();
     this.isDragging.set(false);
-    const file = event.dataTransfer?.files[0];
-    if (file) {
-      this.selectedFile.set(file);
+    const files = event.dataTransfer?.files;
+    if (files && files.length > 0) {
+      this.selectedFiles.set(Array.from(files));
       this.showUploadForm.set(true);
     }
   }
 
   onFileSelected(event: Event) {
-    const file = (event.target as HTMLInputElement).files?.[0];
-    if (file) this.selectedFile.set(file);
+    const files = (event.target as HTMLInputElement).files;
+    if (files && files.length > 0) this.selectedFiles.set(Array.from(files));
   }
 
   cancelUpload() {
     this.showUploadForm.set(false);
-    this.selectedFile.set(null);
+    this.selectedFiles.set([]);
+    this.uploadingIndex.set(0);
     this.uploadDescription.set('');
     this.uploadError.set('');
   }
 
   async submitUpload() {
-    const file = this.selectedFile();
-    if (!file) return;
+    const files = this.selectedFiles();
+    if (files.length === 0) return;
 
     const description = this.uploadDescription().trim();
-    const title = file.name.replace(/\.[^.]+$/, '');
     const uploadedBy = this.auth.user()?.displayName || this.auth.user()?.email || undefined;
 
-    let photoDate: Date | undefined;
-    try {
-      const exifr = await import('exifr');
-      const exif = await exifr.parse(file, ['DateTimeOriginal', 'CreateDate']);
-      photoDate = exif?.DateTimeOriginal ?? exif?.CreateDate ?? undefined;
-    } catch {
-      // EXIF not available — leave photoDate undefined
+    for (let i = 0; i < files.length; i++) {
+      this.uploadingIndex.set(i);
+      const file = files[i];
+      const title = file.name.replace(/\.[^.]+$/, '');
+
+      let photoDate: Date | undefined;
+      try {
+        const exifr = await import('exifr');
+        const exif = await exifr.parse(file, ['DateTimeOriginal', 'CreateDate']);
+        photoDate = exif?.DateTimeOriginal ?? exif?.CreateDate ?? undefined;
+      } catch { /* no EXIF */ }
+
+      const ok = await new Promise<boolean>(resolve => {
+        this.mediaService.uploadMedia(file, 'photos', title, description, uploadedBy, photoDate)
+          .subscribe({
+            next: result => {
+              if (result.error) { this.uploadError.set(result.error); resolve(false); }
+              else if (result.progress === 100) resolve(true);
+            },
+            error: err => { this.uploadError.set(err.message); resolve(false); }
+          });
+      });
+
+      if (!ok) return;
     }
 
-    this.uploadError.set('');
-    this.mediaService.uploadMedia(file, 'photos', title, description, uploadedBy, photoDate)
-      .subscribe({
-        next: result => {
-          if (result.error) {
-            this.uploadError.set(result.error);
-          } else if (result.progress === 100) {
-            this.cancelUpload();
-          }
-        },
-        error: err => this.uploadError.set(err.message)
-      });
+    this.cancelUpload();
   }
 
   openLightbox(item: MediaItem) {
