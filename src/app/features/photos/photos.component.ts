@@ -1,4 +1,4 @@
-import { Component, inject, signal, computed, OnInit } from '@angular/core';
+import { Component, inject, signal, computed, OnInit, HostListener } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { MediaService } from '../../core/services/media.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -150,22 +150,39 @@ import { MediaItem } from '../../core/models/media-item.model';
         </div>
       }
 
-      <!-- Lightbox -->
-      @if (lightboxItem()) {
-        <div class="lightbox" (click)="lightboxItem.set(null)">
-          <div class="lightbox-content" (click)="$event.stopPropagation()">
-            <button class="lightbox-close" (click)="lightboxItem.set(null)">✕</button>
+      <!-- Carousel lightbox -->
+      @if (lightboxIndex() !== null) {
+        <div class="carousel-backdrop"
+             (click)="closeLightbox()"
+             (touchstart)="onTouchStart($event)"
+             (touchend)="onTouchEnd($event)">
+
+          <!-- Prev arrow -->
+          @if (lightboxIndex()! > 0) {
+            <button class="carousel-nav carousel-prev" (click)="$event.stopPropagation(); prevItem()">&#8249;</button>
+          }
+
+          <!-- Media content -->
+          <div class="carousel-content" (click)="$event.stopPropagation()">
+            <div class="carousel-header">
+              <span class="carousel-counter">{{ lightboxIndex()! + 1 }} / {{ mediaItems().length }}</span>
+              <button class="carousel-close" (click)="closeLightbox()">✕</button>
+            </div>
             @if (lightboxItem()!.type === 'image') {
-              <img [src]="lightboxItem()!.url" [alt]="lightboxItem()!.description || lightboxItem()!.title" />
+              <img class="carousel-media" [src]="lightboxItem()!.url" [alt]="lightboxItem()!.description || lightboxItem()!.title" />
             } @else {
-              <video [src]="lightboxItem()!.url" controls autoplay></video>
+              <video class="carousel-media" [src]="lightboxItem()!.url" controls autoplay></video>
             }
             @if (lightboxItem()!.description) {
-              <div class="lightbox-caption">
-                <p>{{ lightboxItem()!.description }}</p>
-              </div>
+              <div class="carousel-caption">{{ lightboxItem()!.description }}</div>
             }
           </div>
+
+          <!-- Next arrow -->
+          @if (lightboxIndex()! < mediaItems().length - 1) {
+            <button class="carousel-nav carousel-next" (click)="$event.stopPropagation(); nextItem()">&#8250;</button>
+          }
+
         </div>
       }
 
@@ -498,38 +515,43 @@ import { MediaItem } from '../../core/models/media-item.model';
 
     .btn-small.btn-cancel { background: transparent; color: var(--text-secondary); }
 
-    /* Lightbox */
-    .lightbox {
+    /* Carousel */
+    .carousel-backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.85);
+      background: rgba(0,0,0,0.92);
       display: flex;
       align-items: center;
       justify-content: center;
       z-index: 1000;
-      padding: 1rem;
+      touch-action: pan-y;
     }
 
-    .lightbox-content {
+    .carousel-content {
       position: relative;
-      max-width: 90vw;
-      max-height: 90vh;
-      background: var(--surface);
-      border-radius: 16px;
-      overflow: hidden;
+      max-width: min(92vw, 960px);
+      max-height: 92vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
 
-    .lightbox-content img, .lightbox-content video {
-      max-width: 90vw;
-      max-height: 75vh;
-      display: block;
+    .carousel-header {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 0 0.5rem;
     }
 
-    .lightbox-close {
-      position: absolute;
-      top: 0.75rem;
-      right: 0.75rem;
-      background: rgba(0,0,0,0.5);
+    .carousel-counter {
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.6);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .carousel-close {
+      background: rgba(255,255,255,0.15);
       color: white;
       border: none;
       width: 32px;
@@ -537,17 +559,60 @@ import { MediaItem } from '../../core/models/media-item.model';
       border-radius: 50%;
       font-size: 1rem;
       cursor: pointer;
-      z-index: 10;
       display: flex;
       align-items: center;
       justify-content: center;
+      transition: background 0.2s;
     }
 
-    .lightbox-caption {
-      padding: 0.875rem 1.25rem;
+    .carousel-close:hover { background: rgba(255,255,255,0.3); }
+
+    .carousel-media {
+      display: block;
+      max-width: min(92vw, 960px);
+      max-height: 78vh;
+      object-fit: contain;
+      border-radius: 8px;
     }
 
-    .lightbox-caption p { margin: 0; font-size: 0.9rem; color: var(--text-secondary); }
+    .carousel-caption {
+      margin-top: 0.75rem;
+      font-size: 0.9rem;
+      color: rgba(255,255,255,0.75);
+      text-align: center;
+      max-width: 560px;
+    }
+
+    .carousel-nav {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(255,255,255,0.15);
+      color: white;
+      border: none;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      font-size: 1.75rem;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+      z-index: 10;
+      flex-shrink: 0;
+    }
+
+    .carousel-nav:hover { background: rgba(255,255,255,0.3); }
+    .carousel-prev { left: 1rem; }
+    .carousel-next { right: 1rem; }
+
+    @media (max-width: 600px) {
+      .carousel-nav { width: 36px; height: 36px; font-size: 1.4rem; }
+      .carousel-prev { left: 0.25rem; }
+      .carousel-next { right: 0.25rem; }
+    }
 
     /* Confirm dialog */
     .confirm-dialog {
@@ -585,12 +650,27 @@ export class PhotosComponent implements OnInit {
   showUploadForm = signal(false);
   isDragging = signal(false);
   selectedFile = signal<File | null>(null);
-  lightboxItem = signal<MediaItem | null>(null);
+  lightboxIndex = signal<number | null>(null);
+  lightboxItem = computed(() => {
+    const i = this.lightboxIndex();
+    return i !== null ? this.mediaItems()[i] ?? null : null;
+  });
   deletingItem = signal<MediaItem | null>(null);
   editingId = signal<string | null>(null);
   uploadError = signal('');
   uploadDescription = signal('');
   editDescription = '';
+
+  private touchStartX = 0;
+  private touchStartY = 0;
+
+  @HostListener('document:keydown', ['$event'])
+  onKeyDown(e: KeyboardEvent) {
+    if (this.lightboxIndex() === null) return;
+    if (e.key === 'ArrowRight') this.nextItem();
+    if (e.key === 'ArrowLeft') this.prevItem();
+    if (e.key === 'Escape') this.closeLightbox();
+  }
 
   canSubmit = computed(() =>
     this.selectedFile() !== null && !this.mediaService.uploading()
@@ -661,7 +741,33 @@ export class PhotosComponent implements OnInit {
   }
 
   openLightbox(item: MediaItem) {
-    this.lightboxItem.set(item);
+    const i = this.mediaItems().indexOf(item);
+    if (i !== -1) this.lightboxIndex.set(i);
+  }
+
+  closeLightbox() { this.lightboxIndex.set(null); }
+
+  nextItem() {
+    const i = this.lightboxIndex();
+    if (i !== null && i < this.mediaItems().length - 1) this.lightboxIndex.set(i + 1);
+  }
+
+  prevItem() {
+    const i = this.lightboxIndex();
+    if (i !== null && i > 0) this.lightboxIndex.set(i - 1);
+  }
+
+  onTouchStart(e: TouchEvent) {
+    this.touchStartX = e.touches[0].clientX;
+    this.touchStartY = e.touches[0].clientY;
+  }
+
+  onTouchEnd(e: TouchEvent) {
+    const dx = e.changedTouches[0].clientX - this.touchStartX;
+    const dy = e.changedTouches[0].clientY - this.touchStartY;
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
+      dx < 0 ? this.nextItem() : this.prevItem();
+    }
   }
 
   startEdit(item: MediaItem) {
