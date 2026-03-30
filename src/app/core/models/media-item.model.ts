@@ -1,0 +1,15 @@
+export type MediaType = 'image' | 'video';
+export type SectionType = 'opening' | 'closing' | 'tips';
+
+export interface MediaItem {
+  id: string;
+  section: SectionType;
+  title: string;
+  description: string;
+  type: MediaType;
+  url: string;
+  thumbnailUrl?: string;
+  storagePath: string;
+  uploadedAt: Date;
+  order: number;
+}
