@@ -1,6 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from './core/services/auth.service';
+import { buildInfo } from './build-info';
 
 @Component({
   selector: 'app-root',
@@ -49,6 +50,7 @@ import { AuthService } from './core/services/auth.service';
       </main>
       <footer class="app-footer">
         <p>A guide to our home in France 🇫🇷</p>
+        <a routerLink="/about" class="version-link">v{{ version }} · {{ commitHash }}</a>
       </footer>
     </div>
   `,
@@ -123,7 +125,22 @@ import { AuthService } from './core/services/auth.service';
       color: var(--text-muted);
       font-size: 0.85rem;
       border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
     }
+
+    .version-link {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-family: 'Courier New', monospace;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+
+    .version-link:hover { opacity: 1; }
 
     .auth-area { display: flex; align-items: center; }
 
@@ -190,4 +207,6 @@ import { AuthService } from './core/services/auth.service';
 })
 export class AppComponent {
   auth = inject(AuthService);
+  version = buildInfo.version;
+  commitHash = buildInfo.commitHash;
 }

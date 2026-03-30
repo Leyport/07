@@ -24,5 +24,9 @@ export const routes: Routes = [
     path: 'photos',
     loadComponent: () => import('./features/photos/photos.component').then(m => m.PhotosComponent)
   },
+  {
+    path: 'about',
+    loadComponent: () => import('./features/about/about.component').then(m => m.AboutComponent)
+  },
   { path: '**', redirectTo: '' }
 ];
