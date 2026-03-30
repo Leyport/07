@@ -20,7 +20,7 @@ function Get-ResizedPngBytes {
     return $ms.ToArray()
 }
 
-$src = [System.Drawing.Bitmap]::FromFile('G:\My Drive\Claude\Leyport dark.jpg')
+$src = [System.Drawing.Bitmap]::FromFile('C:\Users\user\Claude\Photos\Leyport dark.jpg')
 
 $png16 = Get-ResizedPngBytes $src 16
 $png32 = Get-ResizedPngBytes $src 32
