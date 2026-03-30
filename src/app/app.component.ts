@@ -11,8 +11,8 @@ import { buildInfo } from './build-info';
     <div class="app-shell">
       <header class="app-header">
         <a routerLink="/" class="brand">
-          <img src="favicon.ico" class="brand-favicon" alt="07 Leyport" />
-          <span class="brand-name">07 Leyport</span>
+          <img src="favicon.ico" class="brand-favicon" alt="7 Leyport" />
+          <span class="brand-name">7 Leyport</span>
         </a>
         <nav class="app-nav">
           <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact:true}">Home</a>
