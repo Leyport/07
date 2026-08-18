@@ -104,10 +104,14 @@ import { MediaItem } from '../../core/models/media-item.model';
             <div class="photo-card" [class.editing]="editingId() === item.id">
               <div class="photo-preview" (click)="openLightbox(item)">
                 @if (item.type === 'image') {
-                  <img [src]="item.url" [alt]="item.description || item.title" loading="lazy" />
+                  <img [src]="item.thumbnailUrl || item.url" [alt]="item.description || item.title" loading="lazy" />
                 } @else {
                   <div class="video-thumb">
-                    <video [src]="item.url" preload="metadata"></video>
+                    @if (item.thumbnailUrl) {
+                      <img [src]="item.thumbnailUrl" [alt]="item.description || item.title" loading="lazy" />
+                    } @else {
+                      <video [src]="item.url" preload="metadata"></video>
+                    }
                     <div class="play-overlay">▶</div>
                   </div>
                 }

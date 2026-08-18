@@ -9,6 +9,7 @@ export interface MediaItem {
   type: MediaType;
   url: string;
   thumbnailUrl?: string;
+  thumbnailPath?: string;
   storagePath: string;
   uploadedAt: Date;
   uploadedBy?: string;

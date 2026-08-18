@@ -92,6 +92,16 @@ export class MediaService {
             const url = await getDownloadURL(uploadTask.snapshot.ref);
             const type = file.type.startsWith('video/') ? 'video' : 'image';
 
+            const thumb = await this.createThumbnail(file);
+            let thumbnailUrl: string | undefined;
+            let thumbnailPath: string | undefined;
+            if (thumb) {
+              thumbnailPath = `media/${section}/thumbs/${Date.now()}_thumb.jpg`;
+              const thumbRef = ref(this.storage, thumbnailPath);
+              await uploadBytesResumable(thumbRef, thumb);
+              thumbnailUrl = await getDownloadURL(thumbRef);
+            }
+
             const mediaRef = collection(this.db, 'media');
             const existing = await getDocs(
               query(mediaRef, where('section', '==', section))
@@ -107,6 +117,7 @@ export class MediaService {
               uploadedAt: new Date(),
               ...(uploadedBy ? { uploadedBy } : {}),
               ...(photoDate ? { photoDate } : {}),
+              ...(thumbnailUrl ? { thumbnailUrl, thumbnailPath } : {}),
               order: existing.size
             });
 
@@ -124,9 +135,72 @@ export class MediaService {
     });
   }
 
+  /** Generates a small JPEG thumbnail (max 640px on the long edge) from an image or video file. */
+  private async createThumbnail(file: File, maxDim = 640): Promise<Blob | null> {
+    try {
+      if (file.type.startsWith('image/')) {
+        const bitmap = await createImageBitmap(file);
+        const blob = await this.drawToThumbnailBlob(bitmap, bitmap.width, bitmap.height, maxDim);
+        bitmap.close();
+        return blob;
+      }
+      if (file.type.startsWith('video/')) {
+        return await this.videoFrameToThumbnailBlob(file, maxDim);
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+
+  private drawToThumbnailBlob(
+    source: CanvasImageSource,
+    sourceWidth: number,
+    sourceHeight: number,
+    maxDim: number
+  ): Promise<Blob | null> {
+    const scale = Math.min(1, maxDim / Math.max(sourceWidth, sourceHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(sourceWidth * scale);
+    canvas.height = Math.round(sourceHeight * scale);
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+    return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+  }
+
+  private videoFrameToThumbnailBlob(file: File, maxDim: number): Promise<Blob | null> {
+    return new Promise(resolve => {
+      const url = URL.createObjectURL(file);
+      const video = document.createElement('video');
+      let settled = false;
+      const finish = (blob: Blob | null) => {
+        if (settled) return;
+        settled = true;
+        URL.revokeObjectURL(url);
+        resolve(blob);
+      };
+
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = 'metadata';
+      video.src = url;
+      video.onloadeddata = () => {
+        video.currentTime = Math.min(0.1, (video.duration || 1) / 2);
+      };
+      video.onseeked = () => {
+        this.drawToThumbnailBlob(video, video.videoWidth, video.videoHeight, maxDim).then(finish);
+      };
+      video.onerror = () => finish(null);
+      setTimeout(() => finish(null), 8000);
+    });
+  }
+
   async deleteMedia(item: MediaItem): Promise<void> {
     const storageRef = ref(this.storage, item.storagePath);
     await deleteObject(storageRef);
+    if (item.thumbnailPath) {
+      await deleteObject(ref(this.storage, item.thumbnailPath)).catch(() => {});
+    }
     await deleteDoc(doc(this.db, 'media', item.id));
   }
 
