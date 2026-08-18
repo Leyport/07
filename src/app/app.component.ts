@@ -20,6 +20,7 @@ import { buildInfo } from './build-info';
           <a routerLink="/closing" routerLinkActive="active">Closing</a>
           <a routerLink="/tips" routerLinkActive="active">Tips</a>
           <a routerLink="/photos" routerLinkActive="active">Photos</a>
+          <a routerLink="/costs" routerLinkActive="active">Costs</a>
         </nav>
         <div class="auth-area">
           @if (!auth.loading()) {
@@ -204,6 +205,7 @@ import { buildInfo } from './build-info';
     @media (max-width: 600px) {
       .app-header { padding: 0.75rem 1rem; flex-wrap: wrap; gap: 0.75rem; }
       .brand-name { font-size: 1rem; }
+      .app-nav { flex-wrap: wrap; justify-content: center; row-gap: 0.35rem; }
       .app-nav a { padding: 0.4rem 0.6rem; font-size: 0.8rem; }
       .app-main { padding: 1rem; }
       .user-name { display: none; }

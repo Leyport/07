@@ -206,6 +206,14 @@ export class HomeComponent {
       icon: '📸',
       color: '#9333ea',
       gradient: 'linear-gradient(135deg, #9333ea, #a855f7)'
+    },
+    {
+      route: '/costs',
+      title: 'Costs & Projects',
+      subtitle: 'Bills, renovation invoices, and jobs still to do',
+      icon: '💶',
+      color: '#16a34a',
+      gradient: 'linear-gradient(135deg, #16a34a, #4ade80)'
     }
   ];
 }
