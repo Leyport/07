@@ -47,7 +47,8 @@ export class MediaService {
         const items = snapshot.docs.map(d => ({
           id: d.id,
           ...d.data(),
-          uploadedAt: d.data()['uploadedAt']?.toDate?.() ?? new Date()
+          uploadedAt: d.data()['uploadedAt']?.toDate?.() ?? new Date(),
+          photoDate: d.data()['photoDate']?.toDate?.() ?? d.data()['photoDate']
         })) as MediaItem[];
         observer.next(items);
       }, err => observer.error(err));
