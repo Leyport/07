@@ -128,6 +128,9 @@ import { COST_CATEGORIES, CostCategory, CostItem, CostStatus } from '../../core/
               @if (formError()) {
                 <p class="error-text">{{ formError() }}</p>
               }
+              @if (!canSubmit() && !costsService.uploading() && !title().trim()) {
+                <p class="hint-text">Add a title to continue.</p>
+              }
 
               <div class="form-actions">
                 <button class="btn-secondary" (click)="cancelForm()">Cancel</button>
@@ -373,6 +376,7 @@ import { COST_CATEGORIES, CostCategory, CostItem, CostStatus } from '../../core/
     .progress-fill { height: 100%; background: #16a34a; border-radius: 3px; transition: width 0.3s; }
     .progress-text { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 1rem; }
     .error-text { color: #ef4444; font-size: 0.85rem; margin: 0 0 1rem; }
+    .hint-text { color: var(--text-muted); font-size: 0.85rem; margin: 0 0 1rem; }
 
     .form-actions { display: flex; gap: 0.75rem; justify-content: flex-end; }
 
@@ -585,13 +589,22 @@ export class CostsComponent implements OnInit {
     const file = event.dataTransfer?.files[0];
     if (file) {
       this.selectedFile.set(file);
+      this.fillTitleFromFile(file);
       this.showForm.set(true);
     }
   }
 
   onFileSelected(event: Event) {
     const file = (event.target as HTMLInputElement).files?.[0];
-    if (file) this.selectedFile.set(file);
+    if (file) {
+      this.selectedFile.set(file);
+      this.fillTitleFromFile(file);
+    }
+  }
+
+  private fillTitleFromFile(file: File) {
+    if (this.title().trim()) return;
+    this.title.set(file.name.replace(/\.[^.]+$/, ''));
   }
 
   startEdit(item: CostItem) {
