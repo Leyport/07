@@ -1,13 +1,15 @@
-# 🇫🇷 Maison de France — House Guide App
+# 🇫🇷 7 Leyport — House Guide App
 
-An Angular 21 app for sharing photos and videos about your house in France with your children.
+An Angular 21 app for sharing info, photos, and videos about our house in France with the family.
 
 ## Features
-- 📷 Upload photos and videos for each section
 - 🔓 Opening the house guide
 - 🔒 Closing the house guide
 - 💡 General tips
-- ☁️ Firebase Storage & Firestore for cloud media
+- 📷 Photo & video gallery with swipe/keyboard carousel lightbox, hover metadata (taken date, upload date, uploader), and drag-and-drop multi-file upload with progress
+- 🔑 Google sign-in (Firebase Auth) — uploading, editing, and deleting media requires sign-in; browsing is open to everyone
+- ☁️ Firebase Storage & Firestore for cloud media, with EXIF-based "date taken" extraction via `exifr`
+- ℹ️ About page showing app version, commit hash, and build date
 - 📱 Mobile-friendly, works on phones and tablets
 - 🌙 Automatic dark mode
 
@@ -36,11 +38,12 @@ npm install
 ### Step 4 — Set up Firebase
 
 1. Go to [console.firebase.google.com](https://console.firebase.google.com)
-2. Create a new project (e.g. "maison-de-france")
+2. Create a new project
 3. Enable **Firestore Database** (start in test mode)
 4. Enable **Storage** (start in test mode)
-5. Go to **Project Settings → Your apps → Add app → Web**
-6. Copy your config and paste it into:
+5. Enable **Authentication → Google** sign-in provider
+6. Go to **Project Settings → Your apps → Add app → Web**
+7. Copy your config and paste it into:
    ```
    src/environments/environment.ts
    src/environments/environment.prod.ts
@@ -65,27 +68,34 @@ Then open [http://localhost:4200](http://localhost:4200)
 src/
   app/
     core/
-      models/         # TypeScript interfaces
-      services/       # MediaService (Firebase)
+      models/           # TypeScript interfaces (MediaItem, etc.)
+      services/
+        auth.service.ts   # Google sign-in via Firebase Auth
+        media.service.ts  # Firestore/Storage CRUD for media
     features/
-      home/           # Home page with section cards
-      section/        # Shared component for opening/closing/tips
-    app.component.ts  # Root shell with navigation
-    app.routes.ts     # Routing
-    app.config.ts     # Firebase providers
-  environments/       # Firebase config (fill these in!)
-  styles.scss         # Global styles
+      home/             # Home page with section cards
+      section/          # Shared component for opening/closing/tips content
+      photos/           # Photo & video gallery, upload, lightbox carousel
+      about/            # Version/build info page
+    app.component.ts    # Root shell with nav + auth UI
+    app.routes.ts       # Routing
+    app.config.ts       # Firebase providers
+    build-info.ts        # Generated at build time (version/commit/date)
+  environments/         # Firebase config (fill these in!)
+  styles.scss           # Global styles
+scripts/
+  set-version.mjs       # Generates build-info.ts before start/build
 ```
 
 ---
 
-## Deploying (optional)
+## Deploying
 
-To share with your children via a public URL:
+The app deploys to Firebase Hosting:
 ```bash
 npm install -g firebase-tools
 firebase login
-firebase init hosting
 ng build
 firebase deploy
 ```
+Hosting config lives in `firebase.json` / `.firebaserc`.
