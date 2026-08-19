@@ -2,7 +2,7 @@ import { Injectable, signal } from '@angular/core';
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import {
   getFirestore, collection, getDocs, addDoc, deleteDoc,
-  doc, query, orderBy, onSnapshot, updateDoc, Firestore
+  doc, query, orderBy, onSnapshot, updateDoc, setDoc, Firestore
 } from 'firebase/firestore';
 import {
   getStorage, ref, uploadBytesResumable,
@@ -142,12 +142,13 @@ export class CostsService {
     await deleteDoc(doc(this.db, 'costs', item.id));
   }
 
+  /** Custom categories and built-in overrides — doc ID is always the category's `value`. */
   getCategories(): Observable<CustomCostCategory[]> {
     return new Observable(observer => {
       const categoriesRef = collection(this.db, 'costCategories');
       const q = query(categoriesRef, orderBy('order', 'asc'));
       const unsubscribe = onSnapshot(q, snapshot => {
-        const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as CustomCostCategory[];
+        const items = snapshot.docs.map(d => d.data()) as CustomCostCategory[];
         observer.next(items);
       }, err => observer.error(err));
 
@@ -155,13 +156,18 @@ export class CostsService {
     });
   }
 
-  async addCategory(value: string, label: string, icon: string): Promise<void> {
-    const categoriesRef = collection(this.db, 'costCategories');
-    const existing = await getDocs(query(categoriesRef));
-    await addDoc(categoriesRef, { value, label, icon, order: existing.size });
+  /** Creates a new custom category, or overrides the icon/color of an existing (possibly built-in) one — keyed by `value`. */
+  async upsertCategory(value: string, label: string, icon: string, color: string, order?: number): Promise<void> {
+    const data: CustomCostCategory = { value, label, icon, color, order: order ?? 0 };
+    await setDoc(doc(this.db, 'costCategories', value), data);
   }
 
-  async deleteCategory(id: string): Promise<void> {
-    await deleteDoc(doc(this.db, 'costCategories', id));
+  async nextCustomCategoryOrder(): Promise<number> {
+    const existing = await getDocs(query(collection(this.db, 'costCategories')));
+    return existing.size;
+  }
+
+  async deleteCategory(value: string): Promise<void> {
+    await deleteDoc(doc(this.db, 'costCategories', value));
   }
 }

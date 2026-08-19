@@ -31,6 +31,7 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
           <div class="summary-breakdown">
             @for (row of categoryTotals(); track row.category) {
               <div class="breakdown-row">
+                <span class="breakdown-dot" [style.background]="categoryMeta(row.category).color"></span>
                 <span class="breakdown-icon">{{ categoryMeta(row.category).icon }}</span>
                 <span class="breakdown-label">{{ categoryMeta(row.category).label }}</span>
                 <span class="breakdown-amount">{{ formatAmount(row.amount) }}</span>
@@ -101,13 +102,31 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
                   <ul class="category-list">
                     @for (c of allCategories(); track c.value) {
                       <li>
-                        <span>{{ c.icon }} {{ c.label }}</span>
-                        @if (!c.builtIn) {
-                          @if (categoryInUse(c.value)) {
-                            <span class="category-in-use" title="Used by an existing item — remove or recategorize it first">in use</span>
-                          } @else {
-                            <button type="button" class="category-remove" (click)="removeCustomCategory(c)" title="Remove category">🗑️</button>
-                          }
+                        @if (editingCategoryValue() === c.value) {
+                          <div class="category-edit-row">
+                            <input [value]="editCategoryIcon()" (input)="editCategoryIcon.set($any($event.target).value)"
+                              type="text" maxlength="4" class="category-icon-input" />
+                            <input [value]="editCategoryColor()" (input)="editCategoryColor.set($any($event.target).value)"
+                              type="color" class="category-color-input" />
+                            <span class="category-edit-label">{{ c.label }}</span>
+                            <button type="button" class="btn-small" (click)="saveCategoryEdit(c)">Save</button>
+                            <button type="button" class="btn-small btn-cancel" (click)="editingCategoryValue.set(null)">Cancel</button>
+                          </div>
+                        } @else {
+                          <span class="category-row-label">
+                            <span class="category-swatch" [style.background]="c.color"></span>
+                            {{ c.icon }} {{ c.label }}
+                          </span>
+                          <div class="category-row-actions">
+                            <button type="button" class="category-edit-btn" (click)="startCategoryEdit(c)" title="Change icon/color">✏️</button>
+                            @if (!c.builtIn) {
+                              @if (categoryInUse(c.value)) {
+                                <span class="category-in-use" title="Used by an existing item — remove or recategorize it first">in use</span>
+                              } @else {
+                                <button type="button" class="category-remove" (click)="removeCustomCategory(c)" title="Remove category">🗑️</button>
+                              }
+                            }
+                          </div>
                         }
                       </li>
                     }
@@ -115,6 +134,8 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
                   <div class="category-add">
                     <input [value]="newCategoryIcon()" (input)="newCategoryIcon.set($any($event.target).value)"
                       type="text" maxlength="4" placeholder="🏷️" class="category-icon-input" />
+                    <input [value]="newCategoryColor()" (input)="newCategoryColor.set($any($event.target).value)"
+                      type="color" class="category-color-input" />
                     <input [value]="newCategoryLabel()" (input)="newCategoryLabel.set($any($event.target).value)"
                       type="text" placeholder="New category name" class="form-input" (keydown.enter)="addCustomCategory()" />
                     <button type="button" class="btn-secondary" (click)="addCustomCategory()">Add</button>
@@ -204,7 +225,7 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
           @for (item of plannedItems(); track item.id) {
             <div class="cost-card planned">
               <div class="cost-main">
-                <div class="cost-category-badge">{{ categoryMeta(item.category).icon }} {{ categoryMeta(item.category).label }}</div>
+                <div class="cost-category-badge" [style.background]="categoryBg(item.category)" [style.color]="categoryMeta(item.category).color">{{ categoryMeta(item.category).icon }} {{ categoryMeta(item.category).label }}</div>
                 <h3 class="cost-title">{{ item.title }}</h3>
                 @if (item.notes) { <p class="cost-notes">{{ item.notes }}</p> }
                 <div class="cost-meta">
@@ -241,7 +262,7 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
                 </a>
               }
               <div class="cost-main">
-                <div class="cost-category-badge">{{ categoryMeta(item.category).icon }} {{ categoryMeta(item.category).label }}</div>
+                <div class="cost-category-badge" [style.background]="categoryBg(item.category)" [style.color]="categoryMeta(item.category).color">{{ categoryMeta(item.category).icon }} {{ categoryMeta(item.category).label }}</div>
                 <h3 class="cost-title">{{ item.title }}</h3>
                 @if (item.notes) { <p class="cost-notes">{{ item.notes }}</p> }
                 <div class="cost-meta">
@@ -332,6 +353,7 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
     }
 
     .breakdown-row { display: flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; color: var(--text-secondary); }
+    .breakdown-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
     .breakdown-icon { font-size: 0.95rem; }
     .breakdown-label { color: var(--text-muted); }
     .breakdown-amount { font-weight: 600; color: var(--text-primary); }
@@ -456,6 +478,30 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
 
     .category-in-use { font-size: 0.72rem; color: var(--text-muted); font-style: italic; }
 
+    .category-row-label { display: flex; align-items: center; gap: 0.4rem; }
+    .category-swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .category-row-actions { display: flex; align-items: center; gap: 0.15rem; }
+
+    .category-edit-btn {
+      background: none; border: none; cursor: pointer; font-size: 0.8rem;
+      padding: 0.15rem 0.35rem; border-radius: 6px; transition: background 0.15s;
+    }
+    .category-edit-btn:hover { background: var(--hover); }
+
+    .category-edit-row { display: flex; align-items: center; gap: 0.4rem; flex: 1; }
+    .category-edit-label { font-size: 0.85rem; color: var(--text-secondary); flex: 1; }
+
+    .category-color-input {
+      width: 34px;
+      height: 32px;
+      flex-shrink: 0;
+      padding: 2px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      cursor: pointer;
+    }
+
     .category-remove {
       background: none; border: none; cursor: pointer; font-size: 0.9rem;
       padding: 0.15rem 0.35rem; border-radius: 6px; transition: background 0.15s;
@@ -553,8 +599,9 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
       display: inline-block;
       font-size: 0.7rem;
       font-weight: 600;
-      color: var(--text-muted);
-      margin-bottom: 0.25rem;
+      padding: 0.15rem 0.55rem;
+      border-radius: 999px;
+      margin-bottom: 0.35rem;
     }
 
     .cost-title { font-size: 0.98rem; font-weight: 600; margin: 0 0 0.2rem; color: var(--text-primary); }
@@ -618,10 +665,18 @@ export class CostsComponent implements OnInit {
   auth = inject(AuthService);
 
   customCategories = signal<CustomCostCategory[]>([]);
-  allCategories = computed<CostCategoryMeta[]>(() => [
-    ...COST_CATEGORIES,
-    ...this.customCategories().map(c => ({ value: c.value, label: c.label, icon: c.icon, builtIn: false }))
-  ]);
+  allCategories = computed<CostCategoryMeta[]>(() => {
+    const overrides = new Map(this.customCategories().map(c => [c.value, c]));
+    const builtIns = COST_CATEGORIES.map(c => {
+      const o = overrides.get(c.value);
+      return o ? { value: c.value, label: c.label, icon: o.icon, color: o.color, builtIn: true } : c;
+    });
+    const customs = this.customCategories()
+      .filter(c => !COST_CATEGORIES.some(b => b.value === c.value))
+      .sort((a, b) => a.order - b.order)
+      .map(c => ({ value: c.value, label: c.label, icon: c.icon, color: c.color, builtIn: false }));
+    return [...builtIns, ...customs];
+  });
 
   items = signal<CostItem[]>([]);
   showForm = signal(false);
@@ -635,7 +690,11 @@ export class CostsComponent implements OnInit {
   showCategoryManager = signal(false);
   newCategoryLabel = signal('');
   newCategoryIcon = signal('🏷️');
+  newCategoryColor = signal('#6b7280');
   categoryError = signal('');
+  editingCategoryValue = signal<string | null>(null);
+  editCategoryIcon = signal('');
+  editCategoryColor = signal('#6b7280');
 
   status = signal<CostStatus>('paid');
   title = signal('');
@@ -679,11 +738,29 @@ export class CostsComponent implements OnInit {
 
   categoryMeta(value: CostCategory): CostCategoryMeta {
     return this.allCategories().find(c => c.value === value)
-      ?? { value, label: value, icon: '📌', builtIn: false };
+      ?? { value, label: value, icon: '📌', color: '#6b7280', builtIn: false };
+  }
+
+  categoryBg(value: CostCategory): string {
+    return `color-mix(in srgb, ${this.categoryMeta(value).color} 15%, var(--surface))`;
   }
 
   categoryInUse(value: string): boolean {
     return this.items().some(i => i.category === value);
+  }
+
+  startCategoryEdit(c: CostCategoryMeta) {
+    this.editingCategoryValue.set(c.value);
+    this.editCategoryIcon.set(c.icon);
+    this.editCategoryColor.set(c.color);
+  }
+
+  async saveCategoryEdit(c: CostCategoryMeta) {
+    const icon = this.editCategoryIcon().trim() || c.icon;
+    const color = this.editCategoryColor() || c.color;
+    const existingOrder = this.customCategories().find(x => x.value === c.value)?.order ?? 0;
+    await this.costsService.upsertCategory(c.value, c.label, icon, color, existingOrder);
+    this.editingCategoryValue.set(null);
   }
 
   private slugifyCategory(label: string): string {
@@ -706,9 +783,11 @@ export class CostsComponent implements OnInit {
 
     this.categoryError.set('');
     try {
-      await this.costsService.addCategory(value, label, this.newCategoryIcon().trim() || '🏷️');
+      const order = await this.costsService.nextCustomCategoryOrder();
+      await this.costsService.upsertCategory(value, label, this.newCategoryIcon().trim() || '🏷️', this.newCategoryColor(), order);
       this.newCategoryLabel.set('');
       this.newCategoryIcon.set('🏷️');
+      this.newCategoryColor.set('#6b7280');
     } catch (err: any) {
       this.categoryError.set(err.message);
     }
@@ -716,9 +795,7 @@ export class CostsComponent implements OnInit {
 
   async removeCustomCategory(cat: CostCategoryMeta) {
     if (cat.builtIn || this.categoryInUse(cat.value)) return;
-    const match = this.customCategories().find(c => c.value === cat.value);
-    if (!match) return;
-    await this.costsService.deleteCategory(match.id);
+    await this.costsService.deleteCategory(cat.value);
     if (this.category() === cat.value) this.category.set('electricity');
   }
 

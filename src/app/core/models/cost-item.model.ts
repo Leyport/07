@@ -6,26 +6,31 @@ export interface CostCategoryMeta {
   value: CostCategory;
   label: string;
   icon: string;
+  color: string;
   builtIn: boolean;
 }
 
-/** Permanent categories that ship with the app. Never deletable — existing bills are already tagged with these. */
+/** Permanent categories that ship with the app. Never deletable — existing bills are already tagged with these. Icon/color can still be edited. */
 export const COST_CATEGORIES: CostCategoryMeta[] = [
-  { value: 'electricity', label: 'Electricity', icon: '⚡', builtIn: true },
-  { value: 'water', label: 'Water', icon: '💧', builtIn: true },
-  { value: 'gas', label: 'Gas', icon: '🔥', builtIn: true },
-  { value: 'tax', label: 'Tax', icon: '🏛️', builtIn: true },
-  { value: 'insurance', label: 'Insurance', icon: '🛡️', builtIn: true },
-  { value: 'renovation', label: 'Renovation', icon: '🔨', builtIn: true },
-  { value: 'other', label: 'Other', icon: '📌', builtIn: true },
+  { value: 'electricity', label: 'Electricity', icon: '⚡', color: '#f59e0b', builtIn: true },
+  { value: 'water', label: 'Water', icon: '💧', color: '#3b82f6', builtIn: true },
+  { value: 'gas', label: 'Gas', icon: '🔥', color: '#f97316', builtIn: true },
+  { value: 'tax', label: 'Tax', icon: '🏛️', color: '#64748b', builtIn: true },
+  { value: 'insurance', label: 'Insurance', icon: '🛡️', color: '#0d9488', builtIn: true },
+  { value: 'renovation', label: 'Renovation', icon: '🔨', color: '#9333ea', builtIn: true },
+  { value: 'other', label: 'Other', icon: '📌', color: '#6b7280', builtIn: true },
 ];
 
-/** A user-added category, stored in Firestore so it can be removed again later. */
+/**
+ * A category customization stored in Firestore, keyed by its `value`. Either overrides the
+ * icon/color of a built-in category, or (if `value` doesn't match a built-in) defines a
+ * brand-new custom category the user added themselves.
+ */
 export interface CustomCostCategory {
-  id: string;
   value: string;
   label: string;
   icon: string;
+  color: string;
   order: number;
 }
 
