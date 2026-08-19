@@ -2,7 +2,7 @@ import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { CostsService } from '../../core/services/costs.service';
 import { AuthService } from '../../core/services/auth.service';
-import { COST_CATEGORIES, CostCategory, CostItem, CostStatus } from '../../core/models/cost-item.model';
+import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, CustomCostCategory } from '../../core/models/cost-item.model';
 
 @Component({
   selector: 'app-costs',
@@ -82,16 +82,48 @@ import { COST_CATEGORIES, CostCategory, CostItem, CostStatus } from '../../core/
                 <div class="form-group">
                   <label>Category</label>
                   <select [value]="category()" (change)="category.set($any($event.target).value)" class="form-input">
-                    @for (c of categories; track c.value) {
+                    @for (c of allCategories(); track c.value) {
                       <option [value]="c.value">{{ c.icon }} {{ c.label }}</option>
                     }
                   </select>
+                  <button type="button" class="manage-link" (click)="showCategoryManager.set(!showCategoryManager())">
+                    {{ showCategoryManager() ? 'Hide categories' : '⚙️ Manage categories' }}
+                  </button>
                 </div>
                 <div class="form-group">
                   <label>{{ status() === 'paid' ? 'Amount paid (€)' : 'Estimated cost (€, optional)' }}</label>
                   <input [value]="amount()" (input)="amount.set($any($event.target).value)" type="number" min="0" step="0.01" placeholder="0.00" class="form-input" />
                 </div>
               </div>
+
+              @if (showCategoryManager()) {
+                <div class="category-manager">
+                  <ul class="category-list">
+                    @for (c of allCategories(); track c.value) {
+                      <li>
+                        <span>{{ c.icon }} {{ c.label }}</span>
+                        @if (!c.builtIn) {
+                          @if (categoryInUse(c.value)) {
+                            <span class="category-in-use" title="Used by an existing item — remove or recategorize it first">in use</span>
+                          } @else {
+                            <button type="button" class="category-remove" (click)="removeCustomCategory(c)" title="Remove category">🗑️</button>
+                          }
+                        }
+                      </li>
+                    }
+                  </ul>
+                  <div class="category-add">
+                    <input [value]="newCategoryIcon()" (input)="newCategoryIcon.set($any($event.target).value)"
+                      type="text" maxlength="4" placeholder="🏷️" class="category-icon-input" />
+                    <input [value]="newCategoryLabel()" (input)="newCategoryLabel.set($any($event.target).value)"
+                      type="text" placeholder="New category name" class="form-input" (keydown.enter)="addCustomCategory()" />
+                    <button type="button" class="btn-secondary" (click)="addCustomCategory()">Add</button>
+                  </div>
+                  @if (categoryError()) {
+                    <p class="error-text">{{ categoryError() }}</p>
+                  }
+                </div>
+              }
 
               <div class="form-row">
                 <div class="form-group">
@@ -389,6 +421,59 @@ import { COST_CATEGORIES, CostCategory, CostItem, CostStatus } from '../../core/
     .date-preview.ok { color: #16a34a; }
     .date-preview.warn { color: #ef4444; }
 
+    .manage-link {
+      display: block;
+      margin-top: 0.4rem;
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    .manage-link:hover { color: var(--text-secondary); }
+
+    .category-manager {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.85rem 1rem;
+      margin: -0.25rem 0 1rem;
+    }
+
+    .category-list { list-style: none; margin: 0 0 0.75rem; padding: 0; }
+    .category-list li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.3rem 0;
+      font-size: 0.85rem;
+      color: var(--text-primary);
+      border-bottom: 1px solid var(--border);
+    }
+    .category-list li:last-child { border-bottom: none; }
+
+    .category-in-use { font-size: 0.72rem; color: var(--text-muted); font-style: italic; }
+
+    .category-remove {
+      background: none; border: none; cursor: pointer; font-size: 0.9rem;
+      padding: 0.15rem 0.35rem; border-radius: 6px; transition: background 0.15s;
+    }
+    .category-remove:hover { background: #fee2e2; }
+
+    .category-add { display: flex; gap: 0.5rem; align-items: center; }
+    .category-icon-input {
+      width: 44px;
+      flex-shrink: 0;
+      text-align: center;
+      padding: 0.6rem 0.4rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      font-size: 0.95rem;
+    }
+
     .form-actions { display: flex; gap: 0.75rem; justify-content: flex-end; }
 
     .btn-primary {
@@ -532,7 +617,11 @@ export class CostsComponent implements OnInit {
   costsService = inject(CostsService);
   auth = inject(AuthService);
 
-  categories = COST_CATEGORIES;
+  customCategories = signal<CustomCostCategory[]>([]);
+  allCategories = computed<CostCategoryMeta[]>(() => [
+    ...COST_CATEGORIES,
+    ...this.customCategories().map(c => ({ value: c.value, label: c.label, icon: c.icon, builtIn: false }))
+  ]);
 
   items = signal<CostItem[]>([]);
   showForm = signal(false);
@@ -542,6 +631,11 @@ export class CostsComponent implements OnInit {
   editingId = signal<string | null>(null);
   deletingItem = signal<CostItem | null>(null);
   lightboxItem = signal<CostItem | null>(null);
+
+  showCategoryManager = signal(false);
+  newCategoryLabel = signal('');
+  newCategoryIcon = signal('🏷️');
+  categoryError = signal('');
 
   status = signal<CostStatus>('paid');
   title = signal('');
@@ -580,10 +674,52 @@ export class CostsComponent implements OnInit {
 
   ngOnInit() {
     this.costsService.getCosts().subscribe(items => this.items.set(items));
+    this.costsService.getCategories().subscribe(categories => this.customCategories.set(categories));
   }
 
-  categoryMeta(value: CostCategory) {
-    return this.categories.find(c => c.value === value) ?? this.categories[this.categories.length - 1];
+  categoryMeta(value: CostCategory): CostCategoryMeta {
+    return this.allCategories().find(c => c.value === value)
+      ?? { value, label: value, icon: '📌', builtIn: false };
+  }
+
+  categoryInUse(value: string): boolean {
+    return this.items().some(i => i.category === value);
+  }
+
+  private slugifyCategory(label: string): string {
+    return label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-+|-+$)/g, '');
+  }
+
+  async addCustomCategory() {
+    const label = this.newCategoryLabel().trim();
+    if (!label) return;
+
+    const value = this.slugifyCategory(label);
+    if (!value) {
+      this.categoryError.set('Enter a valid category name.');
+      return;
+    }
+    if (this.allCategories().some(c => c.value === value)) {
+      this.categoryError.set('That category already exists.');
+      return;
+    }
+
+    this.categoryError.set('');
+    try {
+      await this.costsService.addCategory(value, label, this.newCategoryIcon().trim() || '🏷️');
+      this.newCategoryLabel.set('');
+      this.newCategoryIcon.set('🏷️');
+    } catch (err: any) {
+      this.categoryError.set(err.message);
+    }
+  }
+
+  async removeCustomCategory(cat: CostCategoryMeta) {
+    if (cat.builtIn || this.categoryInUse(cat.value)) return;
+    const match = this.customCategories().find(c => c.value === cat.value);
+    if (!match) return;
+    await this.costsService.deleteCategory(match.id);
+    if (this.category() === cat.value) this.category.set('electricity');
   }
 
   formatAmount(amount?: number): string {

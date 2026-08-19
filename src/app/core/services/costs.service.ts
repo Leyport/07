@@ -9,7 +9,7 @@ import {
   getDownloadURL, deleteObject, FirebaseStorage
 } from 'firebase/storage';
 import { Observable } from 'rxjs';
-import { CostCategory, CostItem, CostStatus } from '../models/cost-item.model';
+import { CostCategory, CostItem, CostStatus, CustomCostCategory } from '../models/cost-item.model';
 import { environment } from '../../../environments/environment';
 
 export interface CostUploadProgress {
@@ -140,5 +140,28 @@ export class CostsService {
       await deleteObject(ref(this.storage, item.storagePath)).catch(() => {});
     }
     await deleteDoc(doc(this.db, 'costs', item.id));
+  }
+
+  getCategories(): Observable<CustomCostCategory[]> {
+    return new Observable(observer => {
+      const categoriesRef = collection(this.db, 'costCategories');
+      const q = query(categoriesRef, orderBy('order', 'asc'));
+      const unsubscribe = onSnapshot(q, snapshot => {
+        const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as CustomCostCategory[];
+        observer.next(items);
+      }, err => observer.error(err));
+
+      return () => unsubscribe();
+    });
+  }
+
+  async addCategory(value: string, label: string, icon: string): Promise<void> {
+    const categoriesRef = collection(this.db, 'costCategories');
+    const existing = await getDocs(query(categoriesRef));
+    await addDoc(categoriesRef, { value, label, icon, order: existing.size });
+  }
+
+  async deleteCategory(id: string): Promise<void> {
+    await deleteDoc(doc(this.db, 'costCategories', id));
   }
 }
