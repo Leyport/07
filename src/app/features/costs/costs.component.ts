@@ -2,7 +2,7 @@ import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { CostsService } from '../../core/services/costs.service';
 import { AuthService } from '../../core/services/auth.service';
-import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, CustomCostCategory } from '../../core/models/cost-item.model';
+import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, CustomCostCategory, CustomPayee } from '../../core/models/cost-item.model';
 
 @Component({
   selector: 'app-costs',
@@ -159,7 +159,47 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
                     }
                   }
                 </div>
+                <div class="form-group">
+                  <label>Payee <span class="label-hint">(optional)</span></label>
+                  <select [value]="payee()" (change)="payee.set($any($event.target).value)" class="form-input">
+                    <option value="">—</option>
+                    @for (p of customPayees(); track p.value) {
+                      <option [value]="p.value">{{ p.name }}</option>
+                    }
+                  </select>
+                  <button type="button" class="manage-link" (click)="showPayeeManager.set(!showPayeeManager())">
+                    {{ showPayeeManager() ? 'Hide payees' : '⚙️ Manage payees' }}
+                  </button>
+                </div>
               </div>
+
+              @if (showPayeeManager()) {
+                <div class="category-manager">
+                  <ul class="category-list">
+                    @for (p of customPayees(); track p.value) {
+                      <li>
+                        <span>{{ p.name }}</span>
+                        @if (payeeInUse(p.value)) {
+                          <span class="category-in-use" title="Used by an existing item — remove or reassign it first">in use</span>
+                        } @else {
+                          <button type="button" class="category-remove" (click)="removePayee(p)" title="Remove payee">🗑️</button>
+                        }
+                      </li>
+                    }
+                    @if (customPayees().length === 0) {
+                      <li><span class="category-in-use">No payees added yet.</span></li>
+                    }
+                  </ul>
+                  <div class="category-add">
+                    <input [value]="newPayeeName()" (input)="newPayeeName.set($any($event.target).value)"
+                      type="text" placeholder="New payee name" class="form-input" (keydown.enter)="addPayee()" />
+                    <button type="button" class="btn-secondary" (click)="addPayee()">Add</button>
+                  </div>
+                  @if (payeeError()) {
+                    <p class="error-text">{{ payeeError() }}</p>
+                  }
+                </div>
+              }
 
               <div class="form-group">
                 <label>Notes <span class="label-hint">(optional)</span></label>
@@ -231,6 +271,7 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
                 <div class="cost-meta">
                   @if (item.date) { <span>🎯 {{ item.date | date:'d MMM yyyy' }}</span> }
                   @if (item.amount) { <span>~{{ formatAmount(item.amount) }} estimated</span> }
+                  @if (item.payee) { <span>👤 {{ payeeName(item.payee) }}</span> }
                 </div>
               </div>
               @if (auth.user()) {
@@ -267,7 +308,8 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
                 @if (item.notes) { <p class="cost-notes">{{ item.notes }}</p> }
                 <div class="cost-meta">
                   @if (item.date) { <span>{{ item.date | date:'d MMM yyyy' }}</span> }
-                  @if (item.uploadedBy) { <span>by {{ item.uploadedBy }}</span> }
+                  @if (item.payee) { <span>👤 Paid by {{ payeeName(item.payee) }}</span> }
+                  @if (item.uploadedBy) { <span>added by {{ item.uploadedBy }}</span> }
                 </div>
               </div>
               <div class="cost-amount">{{ formatAmount(item.amount) }}</div>
@@ -696,11 +738,17 @@ export class CostsComponent implements OnInit {
   editCategoryIcon = signal('');
   editCategoryColor = signal('#6b7280');
 
+  customPayees = signal<CustomPayee[]>([]);
+  showPayeeManager = signal(false);
+  newPayeeName = signal('');
+  payeeError = signal('');
+
   status = signal<CostStatus>('paid');
   title = signal('');
   category = signal<CostCategory>('electricity');
   amount = signal('');
   date = signal('');
+  payee = signal('');
   notes = signal('');
 
   paidItems = computed(() => this.items().filter(i => i.status === 'paid'));
@@ -734,6 +782,7 @@ export class CostsComponent implements OnInit {
   ngOnInit() {
     this.costsService.getCosts().subscribe(items => this.items.set(items));
     this.costsService.getCategories().subscribe(categories => this.customCategories.set(categories));
+    this.costsService.getPayees().subscribe(payees => this.customPayees.set(payees));
   }
 
   categoryMeta(value: CostCategory): CostCategoryMeta {
@@ -743,6 +792,48 @@ export class CostsComponent implements OnInit {
 
   categoryBg(value: CostCategory): string {
     return `color-mix(in srgb, ${this.categoryMeta(value).color} 15%, var(--surface))`;
+  }
+
+  payeeName(value: string): string {
+    return this.customPayees().find(p => p.value === value)?.name ?? value;
+  }
+
+  payeeInUse(value: string): boolean {
+    return this.items().some(i => i.payee === value);
+  }
+
+  private slugifyPayee(name: string): string {
+    return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-+|-+$)/g, '');
+  }
+
+  async addPayee() {
+    const name = this.newPayeeName().trim();
+    if (!name) return;
+
+    const value = this.slugifyPayee(name);
+    if (!value) {
+      this.payeeError.set('Enter a valid payee name.');
+      return;
+    }
+    if (this.customPayees().some(p => p.value === value)) {
+      this.payeeError.set('That payee already exists.');
+      return;
+    }
+
+    this.payeeError.set('');
+    try {
+      const order = await this.costsService.nextPayeeOrder();
+      await this.costsService.addPayee(value, name, order);
+      this.newPayeeName.set('');
+    } catch (err: any) {
+      this.payeeError.set(err.message);
+    }
+  }
+
+  async removePayee(p: CustomPayee) {
+    if (this.payeeInUse(p.value)) return;
+    await this.costsService.deletePayee(p.value);
+    if (this.payee() === p.value) this.payee.set('');
   }
 
   categoryInUse(value: string): boolean {
@@ -840,6 +931,7 @@ export class CostsComponent implements OnInit {
     this.category.set(item.category);
     this.amount.set(item.amount !== undefined ? String(item.amount) : '');
     this.date.set(item.date ? this.toDateDisplayValue(item.date) : '');
+    this.payee.set(item.payee ?? '');
     this.notes.set(item.notes || '');
     this.showForm.set(true);
   }
@@ -851,6 +943,7 @@ export class CostsComponent implements OnInit {
     this.category.set(item.category);
     this.amount.set(item.amount !== undefined ? String(item.amount) : '');
     this.date.set(item.date ? this.toDateDisplayValue(item.date) : this.toDateDisplayValue(new Date()));
+    this.payee.set(item.payee ?? '');
     this.notes.set(item.notes || '');
     this.showForm.set(true);
   }
@@ -905,6 +998,7 @@ export class CostsComponent implements OnInit {
     this.category.set('electricity');
     this.amount.set('');
     this.date.set('');
+    this.payee.set('');
     this.notes.set('');
     this.formError.set('');
   }
@@ -925,6 +1019,7 @@ export class CostsComponent implements OnInit {
           notes: this.notes().trim(),
           ...(parsedAmount !== undefined ? { amount: parsedAmount } : {}),
           ...(parsedDate ? { date: parsedDate } : {}),
+          ...(this.payee() ? { payee: this.payee() } : {}),
         });
         this.cancelForm();
       } catch (err: any) {
@@ -943,6 +1038,7 @@ export class CostsComponent implements OnInit {
       notes: this.notes().trim(),
       amount: parsedAmount,
       date: parsedDate,
+      payee: this.payee() || undefined,
       uploadedBy,
     }, this.selectedFile()).subscribe({
       next: result => {

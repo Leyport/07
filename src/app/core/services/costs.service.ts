@@ -9,7 +9,7 @@ import {
   getDownloadURL, deleteObject, FirebaseStorage
 } from 'firebase/storage';
 import { Observable } from 'rxjs';
-import { CostCategory, CostItem, CostStatus, CustomCostCategory } from '../models/cost-item.model';
+import { CostCategory, CostItem, CostStatus, CustomCostCategory, CustomPayee } from '../models/cost-item.model';
 import { environment } from '../../../environments/environment';
 
 export interface CostUploadProgress {
@@ -24,6 +24,7 @@ export interface CostInput {
   amount?: number;
   currency: string;
   date?: Date;
+  payee?: string;
   notes: string;
   uploadedBy?: string;
 }
@@ -80,6 +81,7 @@ export class CostsService {
             notes: input.notes || '',
             ...(input.amount !== undefined ? { amount: input.amount } : {}),
             ...(input.date ? { date: input.date } : {}),
+            ...(input.payee ? { payee: input.payee } : {}),
             ...(input.uploadedBy ? { uploadedBy: input.uploadedBy } : {}),
             ...(attachment ?? {}),
             uploadedAt: new Date(),
@@ -130,7 +132,7 @@ export class CostsService {
 
   async updateCost(
     id: string,
-    updates: Partial<Pick<CostItem, 'title' | 'category' | 'status' | 'amount' | 'date' | 'notes'>>
+    updates: Partial<Pick<CostItem, 'title' | 'category' | 'status' | 'amount' | 'date' | 'payee' | 'notes'>>
   ): Promise<void> {
     await updateDoc(doc(this.db, 'costs', id), { ...updates });
   }
@@ -169,5 +171,32 @@ export class CostsService {
 
   async deleteCategory(value: string): Promise<void> {
     await deleteDoc(doc(this.db, 'costCategories', value));
+  }
+
+  /** Payees — an extensible list of names, doc ID is always the payee's `value` (no built-ins). */
+  getPayees(): Observable<CustomPayee[]> {
+    return new Observable(observer => {
+      const payeesRef = collection(this.db, 'costPayees');
+      const q = query(payeesRef, orderBy('order', 'asc'));
+      const unsubscribe = onSnapshot(q, snapshot => {
+        observer.next(snapshot.docs.map(d => d.data()) as CustomPayee[]);
+      }, err => observer.error(err));
+
+      return () => unsubscribe();
+    });
+  }
+
+  async addPayee(value: string, name: string, order: number): Promise<void> {
+    const data: CustomPayee = { value, name, order };
+    await setDoc(doc(this.db, 'costPayees', value), data);
+  }
+
+  async nextPayeeOrder(): Promise<number> {
+    const existing = await getDocs(query(collection(this.db, 'costPayees')));
+    return existing.size;
+  }
+
+  async deletePayee(value: string): Promise<void> {
+    await deleteDoc(doc(this.db, 'costPayees', value));
   }
 }

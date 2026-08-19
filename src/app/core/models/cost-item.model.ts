@@ -34,6 +34,13 @@ export interface CustomCostCategory {
   order: number;
 }
 
+/** A payee, stored in Firestore keyed by `value` — an extensible list, same pattern as categories but with no built-ins. */
+export interface CustomPayee {
+  value: string;
+  name: string;
+  order: number;
+}
+
 export interface CostItem {
   id: string;
   title: string;
@@ -42,6 +49,7 @@ export interface CostItem {
   amount?: number;
   currency: string;
   date?: Date;
+  payee?: string;
   notes: string;
   attachmentUrl?: string;
   attachmentName?: string;
