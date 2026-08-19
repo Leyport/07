@@ -96,7 +96,15 @@ import { COST_CATEGORIES, CostCategory, CostItem, CostStatus } from '../../core/
               <div class="form-row">
                 <div class="form-group">
                   <label>{{ status() === 'paid' ? 'Bill date' : 'Target date (optional)' }}</label>
-                  <input [value]="date()" (input)="date.set($any($event.target).value)" type="date" class="form-input" />
+                  <input [value]="date()" (input)="date.set($any($event.target).value)" type="text"
+                    placeholder="e.g. 15/03/2024 — paste it straight from the bill" class="form-input" />
+                  @if (date().trim()) {
+                    @if (parsedDatePreview(); as preview) {
+                      <p class="date-preview ok">✓ {{ preview }}</p>
+                    } @else {
+                      <p class="date-preview warn">Couldn't read that date — try dd/mm/yyyy</p>
+                    }
+                  }
                 </div>
               </div>
 
@@ -377,6 +385,9 @@ import { COST_CATEGORIES, CostCategory, CostItem, CostStatus } from '../../core/
     .progress-text { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 1rem; }
     .error-text { color: #ef4444; font-size: 0.85rem; margin: 0 0 1rem; }
     .hint-text { color: var(--text-muted); font-size: 0.85rem; margin: 0 0 1rem; }
+    .date-preview { font-size: 0.8rem; margin: 0.4rem 0 0; }
+    .date-preview.ok { color: #16a34a; }
+    .date-preview.warn { color: #ef4444; }
 
     .form-actions { display: flex; gap: 0.75rem; justify-content: flex-end; }
 
@@ -561,9 +572,11 @@ export class CostsComponent implements OnInit {
       .sort((a, b) => b.amount - a.amount);
   });
 
-  canSubmit = computed(() =>
-    this.title().trim().length > 0 && !this.costsService.uploading()
-  );
+  canSubmit = computed(() => {
+    const dateText = this.date().trim();
+    const dateValid = !dateText || this.parseFlexibleDate(dateText) !== undefined;
+    return this.title().trim().length > 0 && dateValid && !this.costsService.uploading();
+  });
 
   ngOnInit() {
     this.costsService.getCosts().subscribe(items => this.items.set(items));
@@ -613,7 +626,7 @@ export class CostsComponent implements OnInit {
     this.title.set(item.title);
     this.category.set(item.category);
     this.amount.set(item.amount !== undefined ? String(item.amount) : '');
-    this.date.set(item.date ? this.toDateInputValue(item.date) : '');
+    this.date.set(item.date ? this.toDateDisplayValue(item.date) : '');
     this.notes.set(item.notes || '');
     this.showForm.set(true);
   }
@@ -624,15 +637,51 @@ export class CostsComponent implements OnInit {
     this.title.set(item.title);
     this.category.set(item.category);
     this.amount.set(item.amount !== undefined ? String(item.amount) : '');
-    this.date.set(item.date ? this.toDateInputValue(item.date) : this.toDateInputValue(new Date()));
+    this.date.set(item.date ? this.toDateDisplayValue(item.date) : this.toDateDisplayValue(new Date()));
     this.notes.set(item.notes || '');
     this.showForm.set(true);
   }
 
-  private toDateInputValue(date: Date): string {
+  private toDateDisplayValue(date: Date): string {
     const d = new Date(date);
-    return d.toISOString().slice(0, 10);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    return `${day}/${month}/${d.getFullYear()}`;
   }
+
+  /** Accepts dd/mm/yyyy, dd-mm-yyyy, dd.mm.yyyy, yyyy-mm-dd, or anything Date can natively parse (e.g. "15 March 2024") — pasted straight from a bill. */
+  private parseFlexibleDate(input: string): Date | undefined {
+    const trimmed = input.trim();
+    if (!trimmed) return undefined;
+
+    const dmy = trimmed.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+    if (dmy) {
+      const day = Number(dmy[1]);
+      const month = Number(dmy[2]);
+      const year = Number(dmy[3]) < 100 ? Number(dmy[3]) + 2000 : Number(dmy[3]);
+      const d = new Date(year, month - 1, day);
+      return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day ? d : undefined;
+    }
+
+    const iso = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (iso) {
+      const year = Number(iso[1]);
+      const month = Number(iso[2]);
+      const day = Number(iso[3]);
+      const d = new Date(year, month - 1, day);
+      return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day ? d : undefined;
+    }
+
+    const native = new Date(trimmed);
+    return isNaN(native.getTime()) ? undefined : native;
+  }
+
+  parsedDatePreview = computed(() => {
+    const parsed = this.parseFlexibleDate(this.date());
+    return parsed
+      ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(parsed)
+      : null;
+  });
 
   cancelForm() {
     this.showForm.set(false);
@@ -652,7 +701,7 @@ export class CostsComponent implements OnInit {
     this.formError.set('');
 
     const parsedAmount = this.amount().trim() ? Number(this.amount()) : undefined;
-    const parsedDate = this.date() ? new Date(this.date()) : undefined;
+    const parsedDate = this.parseFlexibleDate(this.date());
 
     if (this.editingId()) {
       try {
