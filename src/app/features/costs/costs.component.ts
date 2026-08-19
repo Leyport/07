@@ -296,6 +296,11 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
                 <div class="cost-thumb" (click)="lightboxItem.set(item)">
                   <img [src]="item.attachmentUrl" [alt]="item.title" loading="lazy" />
                 </div>
+              } @else if (item.attachmentUrl && item.thumbnailUrl) {
+                <a class="cost-thumb pdf-preview" [href]="item.attachmentUrl" target="_blank" rel="noopener">
+                  <img [src]="item.thumbnailUrl" [alt]="item.title" loading="lazy" />
+                  <span class="pdf-badge">PDF</span>
+                </a>
               } @else if (item.attachmentUrl) {
                 <a class="cost-thumb pdf" [href]="item.attachmentUrl" target="_blank" rel="noopener">
                   <span class="pdf-icon">📄</span>
@@ -634,6 +639,20 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
     }
     .pdf-icon { font-size: 1.5rem; }
     .pdf-label { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em; }
+
+    .cost-thumb.pdf-preview { position: relative; display: block; }
+    .pdf-badge {
+      position: absolute;
+      bottom: 3px;
+      right: 3px;
+      background: rgba(0,0,0,0.65);
+      color: white;
+      font-size: 0.55rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      padding: 0.1rem 0.3rem;
+      border-radius: 4px;
+    }
 
     .cost-main { flex: 1; min-width: 0; }
 

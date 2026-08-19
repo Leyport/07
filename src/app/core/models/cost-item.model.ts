@@ -54,6 +54,8 @@ export interface CostItem {
   attachmentUrl?: string;
   attachmentName?: string;
   attachmentType?: 'image' | 'pdf';
+  thumbnailUrl?: string;
+  thumbnailPath?: string;
   storagePath?: string;
   uploadedAt: Date;
   uploadedBy?: string;

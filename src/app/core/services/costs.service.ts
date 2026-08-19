@@ -68,6 +68,7 @@ export class CostsService {
 
       const finish = async (attachment?: {
         attachmentUrl: string; attachmentName: string; attachmentType: 'image' | 'pdf'; storagePath: string;
+        thumbnailUrl?: string; thumbnailPath?: string;
       }) => {
         try {
           const costsRef = collection(this.db, 'costs');
@@ -124,10 +125,48 @@ export class CostsService {
         async () => {
           const attachmentUrl = await getDownloadURL(uploadTask.snapshot.ref);
           const attachmentType = file.type === 'application/pdf' ? 'pdf' : 'image';
-          await finish({ attachmentUrl, attachmentName: file.name, attachmentType, storagePath });
+
+          let thumbFields: { thumbnailUrl: string; thumbnailPath: string } | Record<string, never> = {};
+          if (attachmentType === 'pdf') {
+            const thumbBlob = await this.generatePdfThumbnail(file);
+            if (thumbBlob) {
+              const thumbnailPath = `costs/thumbs/${Date.now()}_thumb.jpg`;
+              const thumbRef = ref(this.storage, thumbnailPath);
+              await uploadBytesResumable(thumbRef, thumbBlob);
+              const thumbnailUrl = await getDownloadURL(thumbRef);
+              thumbFields = { thumbnailUrl, thumbnailPath };
+            }
+          }
+
+          await finish({ attachmentUrl, attachmentName: file.name, attachmentType, storagePath, ...thumbFields });
         }
       );
     });
+  }
+
+  /** Renders a PDF's first page to a JPEG thumbnail (max 640px on the long edge) using pdf.js, loaded on demand. */
+  private async generatePdfThumbnail(file: File, maxDim = 640): Promise<Blob | null> {
+    try {
+      const pdfjsLib = await import('pdfjs-dist');
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+
+      const buffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+      const page = await pdf.getPage(1);
+      const baseViewport = page.getViewport({ scale: 1 });
+      const scale = maxDim / Math.max(baseViewport.width, baseViewport.height);
+      const viewport = page.getViewport({ scale });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(viewport.width);
+      canvas.height = Math.round(viewport.height);
+      const ctx = canvas.getContext('2d')!;
+      await page.render({ canvasContext: ctx, viewport, canvas }).promise;
+
+      return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+    } catch {
+      return null;
+    }
   }
 
   async updateCost(
@@ -140,6 +179,9 @@ export class CostsService {
   async deleteCost(item: CostItem): Promise<void> {
     if (item.storagePath) {
       await deleteObject(ref(this.storage, item.storagePath)).catch(() => {});
+    }
+    if (item.thumbnailPath) {
+      await deleteObject(ref(this.storage, item.thumbnailPath)).catch(() => {});
     }
     await deleteDoc(doc(this.db, 'costs', item.id));
   }
