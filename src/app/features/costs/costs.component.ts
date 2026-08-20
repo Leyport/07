@@ -49,6 +49,55 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
         }
       </div>
 
+      <!-- Reports -->
+      @if (categoryTotals().length > 0) {
+        <div class="reports-card">
+          <button type="button" class="reports-toggle" (click)="showReports.set(!showReports())">
+            <span>📊 Spending reports</span>
+            <span class="reports-toggle-chevron" [class.open]="showReports()">▾</span>
+          </button>
+          @if (showReports()) {
+            <div class="reports-body">
+              <div class="chart-section">
+                <h3 class="chart-title">By category</h3>
+                <div class="chart-bars">
+                  @for (row of categoryTotals(); track row.category) {
+                    <div class="chart-bar-row">
+                      <div class="chart-bar-label" [title]="categoryMeta(row.category).label">{{ categoryMeta(row.category).icon }} {{ categoryMeta(row.category).label }}</div>
+                      <div class="chart-bar-track">
+                        <div class="chart-bar-fill"
+                          [style.width.%]="barWidthPct(row.amount, categoryChartMax())"
+                          [style.background]="categoryMeta(row.category).color"></div>
+                      </div>
+                      <div class="chart-bar-value">{{ formatAmount(row.amount) }}</div>
+                    </div>
+                  }
+                </div>
+              </div>
+
+              @if (payeeChartData().length > 0) {
+                <div class="chart-section">
+                  <h3 class="chart-title">By payee</h3>
+                  <div class="chart-bars">
+                    @for (row of payeeChartData(); track row.key) {
+                      <div class="chart-bar-row">
+                        <div class="chart-bar-label" [title]="row.label">{{ row.label }}</div>
+                        <div class="chart-bar-track">
+                          <div class="chart-bar-fill"
+                            [style.width.%]="barWidthPct(row.amount, payeeChartMax())"
+                            [style.background]="row.colorSlot >= 0 ? 'var(--payee-slot-' + row.colorSlot + ')' : 'var(--payee-slot-none)'"></div>
+                        </div>
+                        <div class="chart-bar-value">{{ formatAmount(row.amount) }}</div>
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+
       <!-- Add form -->
       @if (auth.user()) {
         <div class="upload-area" [class.dragover]="isDragging()"
@@ -411,6 +460,72 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
       border-top: 1px solid var(--border);
       font-size: 0.85rem;
       color: var(--text-secondary);
+    }
+
+    /* Reports — validated categorical palette for payees (no inherent color of their own);
+       category bars reuse each category's own assigned color for consistency with its badge. */
+    .reports-card {
+      --payee-slot-0: #2a78d6; --payee-slot-1: #eb6834; --payee-slot-2: #1baf7a; --payee-slot-3: #eda100;
+      --payee-slot-4: #e87ba4; --payee-slot-5: #008300; --payee-slot-6: #4a3aa7; --payee-slot-7: #e34948;
+      --payee-slot-none: #9b9893;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      margin-bottom: 1.5rem;
+      overflow: hidden;
+    }
+    @media (prefers-color-scheme: dark) {
+      .reports-card {
+        --payee-slot-0: #3987e5; --payee-slot-1: #d95926; --payee-slot-2: #199e70; --payee-slot-3: #c98500;
+        --payee-slot-4: #d55181; --payee-slot-5: #008300; --payee-slot-6: #9085e9; --payee-slot-7: #e66767;
+      }
+    }
+
+    .reports-toggle {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.5rem;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .reports-toggle-chevron { color: var(--text-muted); transition: transform 0.2s; }
+    .reports-toggle-chevron.open { transform: rotate(180deg); }
+
+    .reports-body { padding: 0 1.5rem 1.5rem; }
+
+    .chart-section + .chart-section { margin-top: 1.5rem; }
+    .chart-title { font-size: 0.85rem; font-weight: 700; color: var(--text-secondary); margin: 0 0 0.75rem; }
+
+    .chart-bars { display: flex; flex-direction: column; gap: 0.6rem; }
+    .chart-bar-row { display: grid; grid-template-columns: 120px 1fr auto; align-items: center; gap: 0.6rem; }
+    .chart-bar-label {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .chart-bar-track { height: 20px; background: var(--hover); border-radius: 4px; overflow: hidden; }
+    .chart-bar-fill { height: 100%; border-radius: 0 4px 4px 0; transition: width 0.4s ease; }
+    .chart-bar-value {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      min-width: 64px;
+      text-align: right;
+    }
+
+    @media (max-width: 560px) {
+      .chart-bar-row { grid-template-columns: 84px 1fr auto; }
+      .chart-bar-label { font-size: 0.72rem; }
     }
 
     /* Upload area (shared visual language with Photos/Section) */
@@ -791,6 +906,51 @@ export class CostsComponent implements OnInit {
       .map(([category, amount]) => ({ category, amount }))
       .sort((a, b) => b.amount - a.amount);
   });
+
+  categoryChartMax = computed(() => Math.max(1, ...this.categoryTotals().map(r => r.amount)));
+
+  showReports = signal(true);
+
+  /**
+   * Grouped by payee, sorted by amount for display — but each payee's color slot is
+   * assigned from their fixed registration order, never their rank here, so a payee's
+   * color never changes as amounts shift. Unassigned/overflow bars are neutral gray,
+   * never a categorical slot.
+   */
+  payeeChartData = computed(() => {
+    const totals = new Map<string, number>();
+    for (const item of this.paidItems()) {
+      if (!item.amount) continue;
+      const key = item.payee ?? '__unassigned__';
+      totals.set(key, (totals.get(key) ?? 0) + item.amount);
+    }
+
+    const registrationOrder = this.customPayees();
+    const rows = Array.from(totals.entries()).map(([key, amount]) => {
+      if (key === '__unassigned__') {
+        return { key, label: 'Unassigned', amount, colorSlot: -1 };
+      }
+      const idx = registrationOrder.findIndex(p => p.value === key);
+      return { key, label: this.payeeName(key), amount, colorSlot: idx >= 0 ? idx % 8 : -1 };
+    });
+
+    rows.sort((a, b) => b.amount - a.amount);
+
+    const MAX_BARS = 8;
+    if (rows.length > MAX_BARS) {
+      const head = rows.slice(0, MAX_BARS - 1);
+      const tailAmount = rows.slice(MAX_BARS - 1).reduce((sum, r) => sum + r.amount, 0);
+      head.push({ key: '__other__', label: 'Other', amount: tailAmount, colorSlot: -1 });
+      return head;
+    }
+    return rows;
+  });
+
+  payeeChartMax = computed(() => Math.max(1, ...this.payeeChartData().map(r => r.amount)));
+
+  barWidthPct(amount: number, max: number): number {
+    return max > 0 ? Math.max(2, (amount / max) * 100) : 0;
+  }
 
   canSubmit = computed(() => {
     const dateText = this.date().trim();
