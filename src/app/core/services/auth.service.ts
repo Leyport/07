@@ -1,18 +1,17 @@
 import { Injectable, signal, computed } from '@angular/core';
-import { initializeApp, getApps } from 'firebase/app';
+import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import {
   getAuth, onAuthStateChanged, signInWithPopup,
   GoogleAuthProvider, signOut, User, Auth
 } from 'firebase/auth';
-import {
-  getFirestore, doc, getDoc, setDoc, onSnapshot, Firestore
-} from 'firebase/firestore';
+import type { Firestore } from 'firebase/firestore';
 import { environment } from '../../../environments/environment';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
+  private app: FirebaseApp;
   private auth: Auth;
-  private db: Firestore;
+  private db: Firestore | null = null;
   private profileUnsub: (() => void) | null = null;
 
   user = signal<User | null>(null);
@@ -27,9 +26,8 @@ export class AuthService {
   canWrite = computed(() => this.user() !== null && (this.approved() || this.admin()));
 
   constructor() {
-    const app = getApps().length ? getApps()[0] : initializeApp(environment.firebase);
-    this.auth = getAuth(app);
-    this.db = getFirestore(app);
+    this.app = getApps().length ? getApps()[0] : initializeApp(environment.firebase);
+    this.auth = getAuth(this.app);
 
     onAuthStateChanged(this.auth, async u => {
       this.user.set(u);
@@ -45,6 +43,11 @@ export class AuthService {
       }
 
       this.profileLoading.set(true);
+      // Firestore is only needed once someone's actually signed in — load it on demand
+      // so the initial app bundle (auth alone) stays small.
+      const { getFirestore, doc, getDoc, setDoc, onSnapshot } = await import('firebase/firestore');
+      if (!this.db) this.db = getFirestore(this.app);
+
       const userRef = doc(this.db, 'users', u.uid);
 
       const snap = await getDoc(userRef).catch(() => null);
