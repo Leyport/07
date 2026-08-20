@@ -17,13 +17,31 @@ import { MediaItem } from '../../core/models/media-item.model';
           <h1 class="page-title">Photos</h1>
           <p class="page-count">
             @if (mediaItems().length > 0) {
-              {{ mediaItems().length }} photo{{ mediaItems().length !== 1 ? 's' : '' }} & video{{ mediaItems().length !== 1 ? 's' : '' }}
+              @if (selectedYear() !== null) {
+                {{ filteredItems().length }} from {{ selectedYear() }}
+                <button type="button" class="clear-filter" (click)="selectedYear.set(null)">· show all {{ mediaItems().length }}</button>
+              } @else {
+                {{ mediaItems().length }} photo{{ mediaItems().length !== 1 ? 's' : '' }} & video{{ mediaItems().length !== 1 ? 's' : '' }}
+              }
             } @else {
               No photos yet
             }
           </p>
         </div>
       </div>
+
+      @if (availableYears().length > 1) {
+        <div class="year-filter">
+          <button type="button" class="year-pill" [class.active]="selectedYear() === null" (click)="selectedYear.set(null)">
+            All
+          </button>
+          @for (y of availableYears(); track y) {
+            <button type="button" class="year-pill" [class.active]="selectedYear() === y" (click)="selectedYear.set(y)">
+              {{ y }}
+            </button>
+          }
+        </div>
+      }
 
       <!-- Upload area — shown only to approved users -->
       @if (auth.canWrite()) {
@@ -103,9 +121,9 @@ import { MediaItem } from '../../core/models/media-item.model';
       }
 
       <!-- Photo grid -->
-      @if (mediaItems().length > 0) {
+      @if (filteredItems().length > 0) {
         <div class="photo-grid">
-          @for (item of mediaItems(); track item.id) {
+          @for (item of filteredItems(); track item.id) {
             <div class="photo-card" [class.editing]="editingId() === item.id">
               <div class="photo-preview" (click)="openLightbox(item)">
                 @if (item.type === 'image') {
@@ -185,7 +203,7 @@ import { MediaItem } from '../../core/models/media-item.model';
           <!-- Media content -->
           <div class="carousel-content" (click)="$event.stopPropagation()">
             <div class="carousel-header">
-              <span class="carousel-counter">{{ lightboxIndex()! + 1 }} / {{ mediaItems().length }}</span>
+              <span class="carousel-counter">{{ lightboxIndex()! + 1 }} / {{ filteredItems().length }}</span>
               <button class="carousel-close" (click)="closeLightbox()">✕</button>
             </div>
             @if (lightboxItem()!.type === 'image') {
@@ -199,7 +217,7 @@ import { MediaItem } from '../../core/models/media-item.model';
           </div>
 
           <!-- Next arrow -->
-          @if (lightboxIndex()! < mediaItems().length - 1) {
+          @if (lightboxIndex()! < filteredItems().length - 1) {
             <button class="carousel-nav carousel-next" (click)="$event.stopPropagation(); nextItem()">&#8250;</button>
           }
 
@@ -243,6 +261,42 @@ import { MediaItem } from '../../core/models/media-item.model';
     }
 
     .page-count { margin: 0; color: var(--text-muted); font-size: 0.9rem; }
+
+    .clear-filter {
+      background: none;
+      border: none;
+      padding: 0;
+      margin-left: 0.2rem;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      text-decoration: underline;
+      cursor: pointer;
+    }
+    .clear-filter:hover { color: var(--text-secondary); }
+
+    .year-filter {
+      display: flex;
+      gap: 0.5rem;
+      overflow-x: auto;
+      padding-bottom: 0.35rem;
+      margin: 1rem 0 1.5rem;
+      scrollbar-width: thin;
+    }
+    .year-pill {
+      flex-shrink: 0;
+      padding: 0.4rem 1rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .year-pill:hover { border-color: #9333ea; }
+    .year-pill.active { background: #9333ea; border-color: #9333ea; color: white; }
 
     /* Upload area */
     .upload-area {
@@ -694,9 +748,26 @@ export class PhotosComponent implements OnInit {
   selectedFiles = signal<File[]>([]);
   uploadingIndex = signal(0);
   lightboxIndex = signal<number | null>(null);
+
+  selectedYear = signal<number | null>(null);
+
+  private itemYear(item: MediaItem): number {
+    return (item.photoDate ?? item.uploadedAt).getFullYear();
+  }
+
+  availableYears = computed(() => {
+    const years = new Set(this.mediaItems().map(i => this.itemYear(i)));
+    return Array.from(years).sort((a, b) => b - a);
+  });
+
+  filteredItems = computed(() => {
+    const year = this.selectedYear();
+    return year === null ? this.mediaItems() : this.mediaItems().filter(i => this.itemYear(i) === year);
+  });
+
   lightboxItem = computed(() => {
     const i = this.lightboxIndex();
-    return i !== null ? this.mediaItems()[i] ?? null : null;
+    return i !== null ? this.filteredItems()[i] ?? null : null;
   });
   deletingItem = signal<MediaItem | null>(null);
   editingId = signal<string | null>(null);
@@ -790,7 +861,7 @@ export class PhotosComponent implements OnInit {
   }
 
   openLightbox(item: MediaItem) {
-    const i = this.mediaItems().indexOf(item);
+    const i = this.filteredItems().indexOf(item);
     if (i !== -1) this.lightboxIndex.set(i);
   }
 
@@ -798,7 +869,7 @@ export class PhotosComponent implements OnInit {
 
   nextItem() {
     const i = this.lightboxIndex();
-    if (i !== null && i < this.mediaItems().length - 1) this.lightboxIndex.set(i + 1);
+    if (i !== null && i < this.filteredItems().length - 1) this.lightboxIndex.set(i + 1);
   }
 
   prevItem() {
