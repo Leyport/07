@@ -99,7 +99,7 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
       }
 
       <!-- Add form -->
-      @if (auth.user()) {
+      @if (auth.canWrite()) {
         <div class="upload-area" [class.dragover]="isDragging()"
              (dragover)="onDragOver($event)" (dragleave)="isDragging.set(false)" (drop)="onDrop($event)">
           @if (!showForm()) {
@@ -291,6 +291,11 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
             </div>
           }
         </div>
+      } @else if (auth.user()) {
+        <div class="signin-prompt">
+          <span class="signin-icon">⏳</span>
+          <p>Your account is waiting for approval. Once approved you'll be able to add bills and projects.</p>
+        </div>
       } @else {
         <div class="signin-prompt">
           <span class="signin-icon">🔒</span>
@@ -323,7 +328,7 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
                   @if (item.payee) { <span>👤 {{ payeeName(item.payee) }}</span> }
                 </div>
               </div>
-              @if (auth.user()) {
+              @if (auth.canWrite()) {
                 <div class="cost-actions">
                   <button class="action-btn done" (click)="markDone(item)" title="Mark as done">✅ Done</button>
                   <button class="action-btn" (click)="startEdit(item)" title="Edit">✏️</button>
@@ -367,7 +372,7 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
                 </div>
               </div>
               <div class="cost-amount">{{ formatAmount(item.amount) }}</div>
-              @if (auth.user()) {
+              @if (auth.canWrite()) {
                 <div class="cost-actions">
                   <button class="action-btn" (click)="startEdit(item)" title="Edit">✏️</button>
                   <button class="action-btn danger" (click)="confirmDelete(item)" title="Delete">🗑️</button>

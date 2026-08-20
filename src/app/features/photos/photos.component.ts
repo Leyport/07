@@ -25,8 +25,8 @@ import { MediaItem } from '../../core/models/media-item.model';
         </div>
       </div>
 
-      <!-- Upload area — shown only to signed-in users -->
-      @if (auth.user()) {
+      <!-- Upload area — shown only to approved users -->
+      @if (auth.canWrite()) {
         <div class="upload-area" [class.dragover]="isDragging()"
              (dragover)="onDragOver($event)" (dragleave)="isDragging.set(false)" (drop)="onDrop($event)">
           @if (!showUploadForm()) {
@@ -80,6 +80,11 @@ import { MediaItem } from '../../core/models/media-item.model';
               </div>
             </div>
           }
+        </div>
+      } @else if (auth.user()) {
+        <div class="signin-prompt">
+          <span class="signin-icon">⏳</span>
+          <p>Your account is waiting for approval. Once approved you'll be able to upload photos and videos.</p>
         </div>
       } @else {
         <div class="signin-prompt">
@@ -138,7 +143,7 @@ import { MediaItem } from '../../core/models/media-item.model';
                 }
               </div>
 
-              @if (item.description || auth.user()) {
+              @if (item.description || auth.canWrite()) {
                 <div class="photo-info">
                   @if (editingId() === item.id) {
                     <textarea [value]="editDescription" (input)="editDescription = $any($event.target).value"
@@ -151,7 +156,7 @@ import { MediaItem } from '../../core/models/media-item.model';
                     @if (item.description) {
                       <p class="photo-desc">{{ item.description }}</p>
                     }
-                    @if (auth.user()) {
+                    @if (auth.canWrite()) {
                       <div class="photo-actions">
                         <button class="action-btn" (click)="startEdit(item)" title="Edit">✏️</button>
                         <button class="action-btn danger" (click)="confirmDelete(item)" title="Delete">🗑️</button>

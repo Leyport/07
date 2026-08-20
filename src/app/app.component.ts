@@ -21,6 +21,9 @@ import { buildInfo } from './build-info';
           <a routerLink="/tips" routerLinkActive="active">Tips</a>
           <a routerLink="/photos" routerLinkActive="active">Photos</a>
           <a routerLink="/costs" routerLinkActive="active">Costs</a>
+          @if (auth.admin()) {
+            <a routerLink="/admin" routerLinkActive="active">Admin</a>
+          }
         </nav>
         <div class="auth-area">
           @if (!auth.loading()) {
