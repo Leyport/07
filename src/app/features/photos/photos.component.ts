@@ -30,18 +30,26 @@ import { MediaItem } from '../../core/models/media-item.model';
         </div>
       </div>
 
-      @if (availableYears().length > 1) {
-        <div class="year-filter">
-          <button type="button" class="year-pill" [class.active]="selectedYear() === null" (click)="selectedYear.set(null)">
-            All
-          </button>
-          @for (y of availableYears(); track y) {
-            <button type="button" class="year-pill" [class.active]="selectedYear() === y" (click)="selectedYear.set(y)">
-              {{ y }}
+      <div class="filter-row">
+        @if (availableYears().length > 1) {
+          <div class="year-filter">
+            <button type="button" class="year-pill" [class.active]="selectedYear() === null" (click)="selectedYear.set(null)">
+              All
             </button>
-          }
-        </div>
-      }
+            @for (y of availableYears(); track y) {
+              <button type="button" class="year-pill" [class.active]="selectedYear() === y" (click)="selectedYear.set(y)">
+                {{ y }}
+              </button>
+            }
+          </div>
+        }
+        @if (filteredItems().length > 0) {
+          <div class="view-toggle">
+            <button type="button" [class.active]="viewMode() === 'compact'" (click)="setViewMode('compact')" title="Thumbnail grid">▦</button>
+            <button type="button" [class.active]="viewMode() === 'masonry'" (click)="setViewMode('masonry')" title="Large photos">▤</button>
+          </div>
+        }
+      </div>
 
       <!-- Upload area — shown only to approved users -->
       @if (auth.canWrite()) {
@@ -120,8 +128,28 @@ import { MediaItem } from '../../core/models/media-item.model';
         </div>
       }
 
-      <!-- Photo grid -->
-      @if (filteredItems().length > 0) {
+      <!-- Compact thumbnail grid -->
+      @if (filteredItems().length > 0 && viewMode() === 'compact') {
+        <div class="photo-grid-compact">
+          @for (item of filteredItems(); track item.id) {
+            <div class="thumb-card" (click)="openLightbox(item)" [title]="item.description || item.title">
+              @if (item.type === 'image') {
+                <img [src]="item.thumbnailUrl || item.url" [alt]="item.description || item.title" loading="lazy" />
+              } @else {
+                @if (item.thumbnailUrl) {
+                  <img [src]="item.thumbnailUrl" [alt]="item.description || item.title" loading="lazy" />
+                } @else {
+                  <video [src]="item.url" preload="metadata"></video>
+                }
+                <div class="thumb-play">▶</div>
+              }
+            </div>
+          }
+        </div>
+      }
+
+      <!-- Photo grid (masonry) -->
+      @if (filteredItems().length > 0 && viewMode() === 'masonry') {
         <div class="photo-grid">
           @for (item of filteredItems(); track item.id) {
             <div class="photo-card" [class.editing]="editingId() === item.id">
@@ -274,12 +302,22 @@ import { MediaItem } from '../../core/models/media-item.model';
     }
     .clear-filter:hover { color: var(--text-secondary); }
 
+    .filter-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin: 1rem 0 1.5rem;
+      flex-wrap: wrap;
+    }
+
     .year-filter {
       display: flex;
       gap: 0.5rem;
       overflow-x: auto;
       padding-bottom: 0.35rem;
-      margin: 1rem 0 1.5rem;
+      flex: 1;
+      min-width: 0;
       scrollbar-width: thin;
     }
     .year-pill {
@@ -297,6 +335,65 @@ import { MediaItem } from '../../core/models/media-item.model';
     }
     .year-pill:hover { border-color: #9333ea; }
     .year-pill.active { background: #9333ea; border-color: #9333ea; color: white; }
+
+    .view-toggle {
+      display: flex;
+      flex-shrink: 0;
+      margin-left: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .view-toggle button {
+      width: 36px;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--surface);
+      border: none;
+      color: var(--text-muted);
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .view-toggle button + button { border-left: 1px solid var(--border); }
+    .view-toggle button:hover { background: var(--hover); }
+    .view-toggle button.active { background: #9333ea; color: white; }
+
+    .photo-grid-compact {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+      gap: 4px;
+    }
+    .thumb-card {
+      position: relative;
+      aspect-ratio: 1;
+      overflow: hidden;
+      border-radius: 6px;
+      cursor: pointer;
+      background: var(--hover);
+    }
+    .thumb-card img, .thumb-card video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.2s;
+    }
+    .thumb-card:hover img, .thumb-card:hover video { transform: scale(1.08); }
+    .thumb-play {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      color: white;
+      background: rgba(0,0,0,0.25);
+      pointer-events: none;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+    }
 
     /* Upload area */
     .upload-area {
@@ -750,6 +847,21 @@ export class PhotosComponent implements OnInit {
   lightboxIndex = signal<number | null>(null);
 
   selectedYear = signal<number | null>(null);
+
+  viewMode = signal<'compact' | 'masonry'>(this.loadViewMode());
+
+  private loadViewMode(): 'compact' | 'masonry' {
+    try {
+      return localStorage.getItem('photosViewMode') === 'masonry' ? 'masonry' : 'compact';
+    } catch {
+      return 'compact';
+    }
+  }
+
+  setViewMode(mode: 'compact' | 'masonry') {
+    this.viewMode.set(mode);
+    try { localStorage.setItem('photosViewMode', mode); } catch {}
+  }
 
   private itemYear(item: MediaItem): number {
     return (item.photoDate ?? item.uploadedAt).getFullYear();
