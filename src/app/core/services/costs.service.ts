@@ -2,14 +2,14 @@ import { Injectable, signal } from '@angular/core';
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import {
   getFirestore, collection, getDocs, addDoc, deleteDoc,
-  doc, query, orderBy, onSnapshot, updateDoc, setDoc, Firestore
+  doc, query, orderBy, onSnapshot, updateDoc, setDoc, writeBatch, Firestore
 } from 'firebase/firestore';
 import {
   getStorage, ref, uploadBytesResumable,
   getDownloadURL, deleteObject, FirebaseStorage
 } from 'firebase/storage';
 import { Observable } from 'rxjs';
-import { CostCategory, CostItem, CostStatus, CustomCostCategory, CustomPayee } from '../models/cost-item.model';
+import { CostCategory, CostFolder, CostItem, CostStatus, CustomCostCategory, CustomPayee } from '../models/cost-item.model';
 import { environment } from '../../../environments/environment';
 
 export interface CostUploadProgress {
@@ -176,6 +176,18 @@ export class CostsService {
     await updateDoc(doc(this.db, 'costs', id), { ...updates });
   }
 
+  async moveToFolder(costId: string, folderId: string | null): Promise<void> {
+    await updateDoc(doc(this.db, 'costs', costId), { folderId });
+  }
+
+  async moveManyToFolder(costIds: string[], folderId: string | null): Promise<void> {
+    const batch = writeBatch(this.db);
+    for (const id of costIds) {
+      batch.update(doc(this.db, 'costs', id), { folderId });
+    }
+    await batch.commit();
+  }
+
   async deleteCost(item: CostItem): Promise<void> {
     if (item.storagePath) {
       await deleteObject(ref(this.storage, item.storagePath)).catch(() => {});
@@ -240,5 +252,29 @@ export class CostsService {
 
   async deletePayee(value: string): Promise<void> {
     await deleteDoc(doc(this.db, 'costPayees', value));
+  }
+
+  /** Folders for grouping cost items — no built-ins, plain auto-generated Firestore doc IDs. */
+  getFolders(): Observable<CostFolder[]> {
+    return new Observable(observer => {
+      const foldersRef = collection(this.db, 'costFolders');
+      const q = query(foldersRef, orderBy('order', 'asc'));
+      const unsubscribe = onSnapshot(q, snapshot => {
+        const folders = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as CostFolder[];
+        observer.next(folders);
+      }, err => observer.error(err));
+
+      return () => unsubscribe();
+    });
+  }
+
+  async addFolder(name: string): Promise<void> {
+    const foldersRef = collection(this.db, 'costFolders');
+    const existing = await getDocs(query(foldersRef));
+    await addDoc(foldersRef, { name, order: existing.size });
+  }
+
+  async deleteFolder(id: string): Promise<void> {
+    await deleteDoc(doc(this.db, 'costFolders', id));
   }
 }

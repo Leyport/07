@@ -2,7 +2,7 @@ import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { CostsService } from '../../core/services/costs.service';
 import { AuthService } from '../../core/services/auth.service';
-import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, CustomCostCategory, CustomPayee } from '../../core/models/cost-item.model';
+import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostFolder, CostItem, CostStatus, CustomCostCategory, CustomPayee } from '../../core/models/cost-item.model';
 
 @Component({
   selector: 'app-costs',
@@ -93,6 +93,80 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
                   </div>
                 </div>
               }
+            </div>
+          }
+        </div>
+      }
+
+      <!-- Folders -->
+      @if (items().length > 0) {
+        <div class="folders-card">
+          <div class="folders-header">
+            <h2 class="section-heading folders-heading">📁 Folders</h2>
+            <div class="folders-header-actions">
+              @if (auth.canWrite()) {
+                <button type="button" class="manage-link" (click)="toggleSelectionMode()">
+                  {{ selectionMode() ? 'Cancel select' : '☑️ Select bills' }}
+                </button>
+                <button type="button" class="manage-link" (click)="showFolderManager.set(!showFolderManager())">
+                  {{ showFolderManager() ? 'Done' : '⚙️ Manage' }}
+                </button>
+              }
+            </div>
+          </div>
+
+          <div class="folder-pills">
+            <button type="button" class="folder-pill" [class.active]="selectedFolderId() === null" (click)="selectedFolderId.set(null)">
+              All
+            </button>
+            <button type="button" class="folder-pill" [class.active]="selectedFolderId() === 'unfiled'" (click)="selectedFolderId.set('unfiled')">
+              📥 Unfiled @if (unfiledTotal() > 0) { · {{ formatAmount(unfiledTotal()) }} }
+            </button>
+            @for (f of customFolders(); track f.id) {
+              <button type="button" class="folder-pill" [class.active]="selectedFolderId() === f.id" (click)="selectedFolderId.set(f.id)">
+                📁 {{ f.name }} @if (folderTotal(f.id) > 0) { · {{ formatAmount(folderTotal(f.id)) }} }
+              </button>
+            }
+          </div>
+
+          @if (showFolderManager()) {
+            <div class="category-manager">
+              <ul class="category-list">
+                @for (f of customFolders(); track f.id) {
+                  <li>
+                    <span>📁 {{ f.name }}</span>
+                    @if (folderItemCount(f.id) === 0) {
+                      <button type="button" class="category-remove" (click)="deleteFolder(f)" title="Delete folder">🗑️</button>
+                    } @else {
+                      <span class="category-in-use">{{ folderItemCount(f.id) }} item{{ folderItemCount(f.id) !== 1 ? 's' : '' }} — move out first</span>
+                    }
+                  </li>
+                }
+                @if (customFolders().length === 0) {
+                  <li><span class="category-in-use">No folders yet.</span></li>
+                }
+              </ul>
+              <div class="category-add">
+                <input [value]="newFolderName()" (input)="newFolderName.set($any($event.target).value)"
+                  type="text" placeholder="New folder name" class="form-input" (keydown.enter)="addFolder()" />
+                <button type="button" class="btn-secondary" (click)="addFolder()">Add</button>
+              </div>
+              @if (folderError()) {
+                <p class="error-text">{{ folderError() }}</p>
+              }
+            </div>
+          }
+
+          @if (selectionMode() && selectedItemIds().size > 0) {
+            <div class="bulk-bar">
+              <span>{{ selectedItemIds().size }} selected</span>
+              <select [value]="bulkMoveTarget()" (change)="bulkMoveTarget.set($any($event.target).value)" class="form-input">
+                <option value="">📥 Unfiled</option>
+                @for (f of customFolders(); track f.id) {
+                  <option [value]="f.id">📁 {{ f.name }}</option>
+                }
+              </select>
+              <button type="button" class="btn-primary" (click)="bulkMove()">Move</button>
             </div>
           }
         </div>
@@ -313,11 +387,14 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
       }
 
       <!-- Planned work -->
-      @if (plannedItems().length > 0) {
+      @if (visiblePlannedItems().length > 0) {
         <h2 class="section-heading">📋 Planned work</h2>
         <div class="items-list">
-          @for (item of plannedItems(); track item.id) {
+          @for (item of visiblePlannedItems(); track item.id) {
             <div class="cost-card planned">
+              @if (selectionMode()) {
+                <input type="checkbox" class="cost-select" [checked]="selectedItemIds().has(item.id)" (change)="toggleItemSelected(item.id)" />
+              }
               <div class="cost-main">
                 <div class="cost-category-badge" [style.background]="categoryBg(item.category)" [style.color]="categoryMeta(item.category).color">{{ categoryMeta(item.category).icon }} {{ categoryMeta(item.category).label }}</div>
                 <h3 class="cost-title">{{ item.title }}</h3>
@@ -326,10 +403,17 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
                   @if (item.date) { <span>🎯 {{ item.date | date:'d MMM yyyy' }}</span> }
                   @if (item.amount) { <span>~{{ formatAmount(item.amount) }} estimated</span> }
                   @if (item.payee) { <span>👤 {{ payeeName(item.payee) }}</span> }
+                  @if (item.folderId) { <span>📁 {{ folderName(item.folderId) }}</span> }
                 </div>
               </div>
               @if (auth.canWrite()) {
                 <div class="cost-actions">
+                  <select class="folder-select" [value]="item.folderId || ''" (change)="moveItem(item, $any($event.target).value)" title="Move to folder">
+                    <option value="">📥 Unfiled</option>
+                    @for (f of customFolders(); track f.id) {
+                      <option [value]="f.id">📁 {{ f.name }}</option>
+                    }
+                  </select>
                   <button class="action-btn done" (click)="markDone(item)" title="Mark as done">✅ Done</button>
                   <button class="action-btn" (click)="startEdit(item)" title="Edit">✏️</button>
                   <button class="action-btn danger" (click)="confirmDelete(item)" title="Delete">🗑️</button>
@@ -341,11 +425,14 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
       }
 
       <!-- Paid bills / invoices -->
-      @if (paidItems().length > 0) {
+      @if (visiblePaidItems().length > 0) {
         <h2 class="section-heading">🧾 Paid bills &amp; invoices</h2>
         <div class="items-list">
-          @for (item of paidItems(); track item.id) {
+          @for (item of visiblePaidItems(); track item.id) {
             <div class="cost-card">
+              @if (selectionMode()) {
+                <input type="checkbox" class="cost-select" [checked]="selectedItemIds().has(item.id)" (change)="toggleItemSelected(item.id)" />
+              }
               @if (item.attachmentUrl && item.attachmentType === 'image') {
                 <div class="cost-thumb" (click)="lightboxItem.set(item)">
                   <img [src]="item.attachmentUrl" [alt]="item.title" loading="lazy" />
@@ -369,11 +456,18 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
                   @if (item.date) { <span>{{ item.date | date:'d MMM yyyy' }}</span> }
                   @if (item.payee) { <span>👤 Paid by {{ payeeName(item.payee) }}</span> }
                   @if (item.uploadedBy) { <span>added by {{ item.uploadedBy }}</span> }
+                  @if (item.folderId) { <span>📁 {{ folderName(item.folderId) }}</span> }
                 </div>
               </div>
               <div class="cost-amount">{{ formatAmount(item.amount) }}</div>
               @if (auth.canWrite()) {
                 <div class="cost-actions">
+                  <select class="folder-select" [value]="item.folderId || ''" (change)="moveItem(item, $any($event.target).value)" title="Move to folder">
+                    <option value="">📥 Unfiled</option>
+                    @for (f of customFolders(); track f.id) {
+                      <option [value]="f.id">📁 {{ f.name }}</option>
+                    }
+                  </select>
                   <button class="action-btn" (click)="startEdit(item)" title="Edit">✏️</button>
                   <button class="action-btn danger" (click)="confirmDelete(item)" title="Delete">🗑️</button>
                 </div>
@@ -531,6 +625,84 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostItem, CostStatus, 
     @media (max-width: 560px) {
       .chart-bar-row { grid-template-columns: 84px 1fr auto; }
       .chart-bar-label { font-size: 0.72rem; }
+    }
+
+    /* Folders */
+    .folders-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .folders-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 0.85rem;
+    }
+    .folders-heading { margin: 0 !important; }
+    .folders-header-actions { display: flex; gap: 1rem; }
+
+    .folder-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .folder-pill {
+      padding: 0.4rem 1rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .folder-pill:hover { border-color: #16a34a; }
+    .folder-pill.active { background: #16a34a; border-color: #16a34a; color: white; }
+
+    .bulk-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+    .bulk-bar select { flex: 1; max-width: 220px; }
+
+    .cost-select {
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+      margin-right: 0.25rem;
+      cursor: pointer;
+      accent-color: #16a34a;
+    }
+
+    .folder-select {
+      padding: 0.35rem 0.5rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text-secondary);
+      font-size: 0.78rem;
+      max-width: 130px;
+      cursor: pointer;
+    }
+
+    @media (max-width: 560px) {
+      .folder-select { max-width: 100px; }
     }
 
     /* Upload area (shared visual language with Photos/Section) */
@@ -882,6 +1054,16 @@ export class CostsComponent implements OnInit {
   newPayeeName = signal('');
   payeeError = signal('');
 
+  customFolders = signal<CostFolder[]>([]);
+  selectedFolderId = signal<string | 'unfiled' | null>(null);
+  showFolderManager = signal(false);
+  newFolderName = signal('');
+  folderError = signal('');
+
+  selectionMode = signal(false);
+  selectedItemIds = signal<Set<string>>(new Set());
+  bulkMoveTarget = signal('');
+
   status = signal<CostStatus>('paid');
   title = signal('');
   category = signal<CostCategory>('electricity');
@@ -892,6 +1074,40 @@ export class CostsComponent implements OnInit {
 
   paidItems = computed(() => this.items().filter(i => i.status === 'paid'));
   plannedItems = computed(() => this.items().filter(i => i.status === 'planned'));
+
+  private filterByFolder(items: CostItem[]): CostItem[] {
+    const sel = this.selectedFolderId();
+    if (sel === null) return items;
+    if (sel === 'unfiled') return items.filter(i => !i.folderId);
+    return items.filter(i => i.folderId === sel);
+  }
+
+  visiblePaidItems = computed(() => this.filterByFolder(this.paidItems()));
+  visiblePlannedItems = computed(() => this.filterByFolder(this.plannedItems()));
+
+  folderTotals = computed(() => {
+    const totals = new Map<string, number>();
+    for (const item of this.paidItems()) {
+      if (!item.amount) continue;
+      const key = item.folderId ?? '__unfiled__';
+      totals.set(key, (totals.get(key) ?? 0) + item.amount);
+    }
+    return totals;
+  });
+
+  unfiledTotal = computed(() => this.folderTotals().get('__unfiled__') ?? 0);
+
+  folderTotal(folderId: string): number {
+    return this.folderTotals().get(folderId) ?? 0;
+  }
+
+  folderItemCount(folderId: string): number {
+    return this.items().filter(i => i.folderId === folderId).length;
+  }
+
+  folderName(folderId: string): string {
+    return this.customFolders().find(f => f.id === folderId)?.name ?? '';
+  }
 
   totalPaid = computed(() =>
     this.paidItems().reduce((sum, i) => sum + (i.amount ?? 0), 0)
@@ -967,6 +1183,53 @@ export class CostsComponent implements OnInit {
     this.costsService.getCosts().subscribe(items => this.items.set(items));
     this.costsService.getCategories().subscribe(categories => this.customCategories.set(categories));
     this.costsService.getPayees().subscribe(payees => this.customPayees.set(payees));
+    this.costsService.getFolders().subscribe(folders => this.customFolders.set(folders));
+  }
+
+  async addFolder() {
+    const name = this.newFolderName().trim();
+    if (!name) return;
+    if (this.customFolders().some(f => f.name.toLowerCase() === name.toLowerCase())) {
+      this.folderError.set('A folder with that name already exists.');
+      return;
+    }
+    this.folderError.set('');
+    try {
+      await this.costsService.addFolder(name);
+      this.newFolderName.set('');
+    } catch (err: any) {
+      this.folderError.set(err.message);
+    }
+  }
+
+  async deleteFolder(f: CostFolder) {
+    if (this.folderItemCount(f.id) > 0) return;
+    await this.costsService.deleteFolder(f.id);
+    if (this.selectedFolderId() === f.id) this.selectedFolderId.set(null);
+  }
+
+  async moveItem(item: CostItem, folderId: string) {
+    await this.costsService.moveToFolder(item.id, folderId || null);
+  }
+
+  toggleSelectionMode() {
+    this.selectionMode.set(!this.selectionMode());
+    this.selectedItemIds.set(new Set());
+  }
+
+  toggleItemSelected(id: string) {
+    const next = new Set(this.selectedItemIds());
+    if (next.has(id)) next.delete(id); else next.add(id);
+    this.selectedItemIds.set(next);
+  }
+
+  async bulkMove() {
+    const ids = Array.from(this.selectedItemIds());
+    if (ids.length === 0) return;
+    await this.costsService.moveManyToFolder(ids, this.bulkMoveTarget() || null);
+    this.selectedItemIds.set(new Set());
+    this.selectionMode.set(false);
+    this.bulkMoveTarget.set('');
   }
 
   categoryMeta(value: CostCategory): CostCategoryMeta {

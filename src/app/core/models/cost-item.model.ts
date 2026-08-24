@@ -41,6 +41,13 @@ export interface CustomPayee {
   order: number;
 }
 
+/** A folder for grouping cost items (e.g. a project spanning several bills). No built-ins — starts empty. */
+export interface CostFolder {
+  id: string;
+  name: string;
+  order: number;
+}
+
 export interface CostItem {
   id: string;
   title: string;
@@ -50,6 +57,7 @@ export interface CostItem {
   currency: string;
   date?: Date;
   payee?: string;
+  folderId?: string | null;
   notes: string;
   attachmentUrl?: string;
   attachmentName?: string;
