@@ -25,6 +25,9 @@ export interface CostInput {
   currency: string;
   date?: Date;
   payee?: string;
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
   notes: string;
   uploadedBy?: string;
 }
@@ -83,6 +86,9 @@ export class CostsService {
             ...(input.amount !== undefined ? { amount: input.amount } : {}),
             ...(input.date ? { date: input.date } : {}),
             ...(input.payee ? { payee: input.payee } : {}),
+            ...(input.contactName ? { contactName: input.contactName } : {}),
+            ...(input.contactPhone ? { contactPhone: input.contactPhone } : {}),
+            ...(input.contactEmail ? { contactEmail: input.contactEmail } : {}),
             ...(input.uploadedBy ? { uploadedBy: input.uploadedBy } : {}),
             ...(attachment ?? {}),
             uploadedAt: new Date(),
@@ -171,7 +177,7 @@ export class CostsService {
 
   async updateCost(
     id: string,
-    updates: Partial<Pick<CostItem, 'title' | 'category' | 'status' | 'amount' | 'date' | 'payee' | 'notes'>>
+    updates: Partial<Pick<CostItem, 'title' | 'category' | 'status' | 'amount' | 'date' | 'payee' | 'contactName' | 'contactPhone' | 'contactEmail' | 'notes'>>
   ): Promise<void> {
     await updateDoc(doc(this.db, 'costs', id), { ...updates });
   }

@@ -325,6 +325,25 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostFolder, CostItem, 
               }
 
               <div class="form-group">
+                <label>Contact name <span class="label-hint">(optional — who sent the bill)</span></label>
+                <input [value]="contactName()" (input)="contactName.set($any($event.target).value)"
+                  type="text" placeholder="e.g. EIRL Bottamedi" class="form-input" />
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Phone <span class="label-hint">(optional)</span></label>
+                  <input [value]="contactPhone()" (input)="contactPhone.set($any($event.target).value)"
+                    type="tel" placeholder="05 55 63 93 46" class="form-input" />
+                </div>
+                <div class="form-group">
+                  <label>Email <span class="label-hint">(optional)</span></label>
+                  <input [value]="contactEmail()" (input)="contactEmail.set($any($event.target).value)"
+                    type="email" placeholder="contact@example.com" class="form-input" />
+                </div>
+              </div>
+
+              <div class="form-group">
                 <label>Notes <span class="label-hint">(optional)</span></label>
                 <textarea [value]="notes()" (input)="notes.set($any($event.target).value)" placeholder="Any extra details..." class="form-input" rows="2"></textarea>
               </div>
@@ -405,6 +424,13 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostFolder, CostItem, 
                   @if (item.payee) { <span>👤 {{ payeeName(item.payee) }}</span> }
                   @if (item.folderId) { <span>📁 {{ folderName(item.folderId) }}</span> }
                 </div>
+                @if (item.contactName || item.contactPhone || item.contactEmail) {
+                  <div class="cost-contact">
+                    @if (item.contactName) { <span>{{ item.contactName }}</span> }
+                    @if (item.contactPhone) { <a [href]="'tel:' + item.contactPhone" (click)="$event.stopPropagation()">📞 {{ item.contactPhone }}</a> }
+                    @if (item.contactEmail) { <a [href]="'mailto:' + item.contactEmail" (click)="$event.stopPropagation()">✉️ {{ item.contactEmail }}</a> }
+                  </div>
+                }
               </div>
               @if (auth.canWrite()) {
                 <div class="cost-actions">
@@ -458,6 +484,13 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostFolder, CostItem, 
                   @if (item.uploadedBy) { <span>added by {{ item.uploadedBy }}</span> }
                   @if (item.folderId) { <span>📁 {{ folderName(item.folderId) }}</span> }
                 </div>
+                @if (item.contactName || item.contactPhone || item.contactEmail) {
+                  <div class="cost-contact">
+                    @if (item.contactName) { <span>{{ item.contactName }}</span> }
+                    @if (item.contactPhone) { <a [href]="'tel:' + item.contactPhone" (click)="$event.stopPropagation()">📞 {{ item.contactPhone }}</a> }
+                    @if (item.contactEmail) { <a [href]="'mailto:' + item.contactEmail" (click)="$event.stopPropagation()">✉️ {{ item.contactEmail }}</a> }
+                  </div>
+                }
               </div>
               <div class="cost-amount">{{ formatAmount(item.amount) }}</div>
               @if (auth.canWrite()) {
@@ -961,6 +994,17 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostFolder, CostItem, 
     .cost-notes { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 0.3rem; line-height: 1.4; }
     .cost-meta { display: flex; gap: 0.75rem; font-size: 0.78rem; color: var(--text-muted); }
 
+    .cost-contact {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      margin-top: 0.3rem;
+      font-size: 0.78rem;
+    }
+    .cost-contact span { color: var(--text-secondary); font-weight: 600; }
+    .cost-contact a { color: var(--accent); text-decoration: none; }
+    .cost-contact a:hover { text-decoration: underline; }
+
     .cost-amount {
       flex-shrink: 0;
       font-size: 1.05rem;
@@ -1070,6 +1114,9 @@ export class CostsComponent implements OnInit {
   amount = signal('');
   date = signal('');
   payee = signal('');
+  contactName = signal('');
+  contactPhone = signal('');
+  contactEmail = signal('');
   notes = signal('');
 
   paidItems = computed(() => this.items().filter(i => i.status === 'paid'));
@@ -1379,6 +1426,9 @@ export class CostsComponent implements OnInit {
     this.amount.set(item.amount !== undefined ? String(item.amount) : '');
     this.date.set(item.date ? this.toDateDisplayValue(item.date) : '');
     this.payee.set(item.payee ?? '');
+    this.contactName.set(item.contactName ?? '');
+    this.contactPhone.set(item.contactPhone ?? '');
+    this.contactEmail.set(item.contactEmail ?? '');
     this.notes.set(item.notes || '');
     this.showForm.set(true);
   }
@@ -1391,6 +1441,9 @@ export class CostsComponent implements OnInit {
     this.amount.set(item.amount !== undefined ? String(item.amount) : '');
     this.date.set(item.date ? this.toDateDisplayValue(item.date) : this.toDateDisplayValue(new Date()));
     this.payee.set(item.payee ?? '');
+    this.contactName.set(item.contactName ?? '');
+    this.contactPhone.set(item.contactPhone ?? '');
+    this.contactEmail.set(item.contactEmail ?? '');
     this.notes.set(item.notes || '');
     this.showForm.set(true);
   }
@@ -1446,6 +1499,9 @@ export class CostsComponent implements OnInit {
     this.amount.set('');
     this.date.set('');
     this.payee.set('');
+    this.contactName.set('');
+    this.contactPhone.set('');
+    this.contactEmail.set('');
     this.notes.set('');
     this.formError.set('');
   }
@@ -1467,6 +1523,9 @@ export class CostsComponent implements OnInit {
           ...(parsedAmount !== undefined ? { amount: parsedAmount } : {}),
           ...(parsedDate ? { date: parsedDate } : {}),
           ...(this.payee() ? { payee: this.payee() } : {}),
+          ...(this.contactName() ? { contactName: this.contactName().trim() } : {}),
+          ...(this.contactPhone() ? { contactPhone: this.contactPhone().trim() } : {}),
+          ...(this.contactEmail() ? { contactEmail: this.contactEmail().trim() } : {}),
         });
         this.cancelForm();
       } catch (err: any) {
@@ -1486,6 +1545,9 @@ export class CostsComponent implements OnInit {
       amount: parsedAmount,
       date: parsedDate,
       payee: this.payee() || undefined,
+      contactName: this.contactName().trim() || undefined,
+      contactPhone: this.contactPhone().trim() || undefined,
+      contactEmail: this.contactEmail().trim() || undefined,
       uploadedBy,
     }, this.selectedFile()).subscribe({
       next: result => {

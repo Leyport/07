@@ -58,6 +58,9 @@ export interface CostItem {
   date?: Date;
   payee?: string;
   folderId?: string | null;
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
   notes: string;
   attachmentUrl?: string;
   attachmentName?: string;
