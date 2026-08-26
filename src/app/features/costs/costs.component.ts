@@ -117,14 +117,18 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostFolder, CostItem, 
 
           <div class="folder-pills">
             <button type="button" class="folder-pill" [class.active]="selectedFolderId() === null" (click)="selectedFolderId.set(null)">
-              All
+              All <span class="folder-pill-count">{{ items().length }}</span>
             </button>
             <button type="button" class="folder-pill" [class.active]="selectedFolderId() === 'unfiled'" (click)="selectedFolderId.set('unfiled')">
-              📥 Unfiled @if (unfiledTotal() > 0) { · {{ formatAmount(unfiledTotal()) }} }
+              📥 Unfiled
+              @if (unfiledCount() > 0) { <span class="folder-pill-count">{{ unfiledCount() }}</span> }
+              @if (unfiledTotal() > 0) { · {{ formatAmount(unfiledTotal()) }} }
             </button>
             @for (f of customFolders(); track f.id) {
               <button type="button" class="folder-pill" [class.active]="selectedFolderId() === f.id" (click)="selectedFolderId.set(f.id)">
-                📁 {{ f.name }} @if (folderTotal(f.id) > 0) { · {{ formatAmount(folderTotal(f.id)) }} }
+                📁 {{ f.name }}
+                @if (folderCount(f.id) > 0) { <span class="folder-pill-count">{{ folderCount(f.id) }}</span> }
+                @if (folderTotal(f.id) > 0) { · {{ formatAmount(folderTotal(f.id)) }} }
               </button>
             }
           </div>
@@ -700,6 +704,19 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostFolder, CostItem, 
     .folder-pill:hover { border-color: #16a34a; }
     .folder-pill.active { background: #16a34a; border-color: #16a34a; color: white; }
 
+    .folder-pill-count {
+      display: inline-block;
+      min-width: 1.1rem;
+      padding: 0 0.3rem;
+      margin-left: 0.3rem;
+      border-radius: 999px;
+      background: color-mix(in srgb, currentColor 15%, transparent);
+      font-size: 0.72rem;
+      font-weight: 700;
+      line-height: 1.3rem;
+      text-align: center;
+    }
+
     .bulk-bar {
       display: flex;
       align-items: center;
@@ -1146,6 +1163,22 @@ export class CostsComponent implements OnInit {
 
   folderTotal(folderId: string): number {
     return this.folderTotals().get(folderId) ?? 0;
+  }
+
+  /** Counts paid items only, matching the set that folderTotals/unfiledTotal sum up. */
+  folderCounts = computed(() => {
+    const counts = new Map<string, number>();
+    for (const item of this.paidItems()) {
+      const key = item.folderId ?? '__unfiled__';
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  });
+
+  unfiledCount = computed(() => this.folderCounts().get('__unfiled__') ?? 0);
+
+  folderCount(folderId: string): number {
+    return this.folderCounts().get(folderId) ?? 0;
   }
 
   folderItemCount(folderId: string): number {
