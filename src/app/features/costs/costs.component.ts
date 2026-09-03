@@ -2,7 +2,7 @@ import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { CostsService } from '../../core/services/costs.service';
 import { AuthService } from '../../core/services/auth.service';
-import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostFolder, CostItem, CostStatus, CustomCostCategory, CustomPayee } from '../../core/models/cost-item.model';
+import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostFolder, CostFrequency, CostItem, CostStatus, CustomCostCategory, CustomPayee } from '../../core/models/cost-item.model';
 
 @Component({
   selector: 'app-costs',
@@ -196,6 +196,16 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostFolder, CostItem, 
                   <div class="status-toggle">
                     <button type="button" class="status-btn" [class.active]="status() === 'paid'" (click)="status.set('paid')">✅ Already paid</button>
                     <button type="button" class="status-btn" [class.active]="status() === 'planned'" (click)="status.set('planned')">📋 Planned / to do</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Frequency</label>
+                  <div class="status-toggle">
+                    <button type="button" class="status-btn" [class.active]="frequency() === 'one-off'" (click)="frequency.set('one-off')">🔂 One-off</button>
+                    <button type="button" class="status-btn" [class.active]="frequency() === 'periodic'" (click)="frequency.set('periodic')">🔁 Periodic</button>
                   </div>
                 </div>
               </div>
@@ -420,6 +430,7 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostFolder, CostItem, 
               }
               <div class="cost-main">
                 <div class="cost-category-badge" [style.background]="categoryBg(item.category)" [style.color]="categoryMeta(item.category).color">{{ categoryMeta(item.category).icon }} {{ categoryMeta(item.category).label }}</div>
+                <span class="cost-frequency-badge" [class.periodic]="item.frequency === 'periodic'">{{ item.frequency === 'periodic' ? '🔁 Periodic' : '🔂 One-off' }}</span>
                 <h3 class="cost-title">{{ item.title }}</h3>
                 @if (item.notes) { <p class="cost-notes">{{ item.notes }}</p> }
                 <div class="cost-meta">
@@ -480,6 +491,7 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostFolder, CostItem, 
               }
               <div class="cost-main">
                 <div class="cost-category-badge" [style.background]="categoryBg(item.category)" [style.color]="categoryMeta(item.category).color">{{ categoryMeta(item.category).icon }} {{ categoryMeta(item.category).label }}</div>
+                <span class="cost-frequency-badge" [class.periodic]="item.frequency === 'periodic'">{{ item.frequency === 'periodic' ? '🔁 Periodic' : '🔂 One-off' }}</span>
                 <h3 class="cost-title">{{ item.title }}</h3>
                 @if (item.notes) { <p class="cost-notes">{{ item.notes }}</p> }
                 <div class="cost-meta">
@@ -1007,6 +1019,19 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostFolder, CostItem, 
       margin-bottom: 0.35rem;
     }
 
+    .cost-frequency-badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.15rem 0.55rem;
+      border-radius: 999px;
+      margin-left: 0.35rem;
+      margin-bottom: 0.35rem;
+      background: var(--hover);
+      color: var(--text-muted);
+    }
+    .cost-frequency-badge.periodic { background: var(--accent-subtle); color: var(--accent); }
+
     .cost-title { font-size: 0.98rem; font-weight: 600; margin: 0 0 0.2rem; color: var(--text-primary); }
     .cost-notes { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 0.3rem; line-height: 1.4; }
     .cost-meta { display: flex; gap: 0.75rem; font-size: 0.78rem; color: var(--text-muted); }
@@ -1126,6 +1151,7 @@ export class CostsComponent implements OnInit {
   bulkMoveTarget = signal('');
 
   status = signal<CostStatus>('paid');
+  frequency = signal<CostFrequency>('one-off');
   title = signal('');
   category = signal<CostCategory>('electricity');
   amount = signal('');
@@ -1454,6 +1480,7 @@ export class CostsComponent implements OnInit {
   startEdit(item: CostItem) {
     this.editingId.set(item.id);
     this.status.set(item.status);
+    this.frequency.set(item.frequency ?? 'one-off');
     this.title.set(item.title);
     this.category.set(item.category);
     this.amount.set(item.amount !== undefined ? String(item.amount) : '');
@@ -1469,6 +1496,7 @@ export class CostsComponent implements OnInit {
   markDone(item: CostItem) {
     this.editingId.set(item.id);
     this.status.set('paid');
+    this.frequency.set(item.frequency ?? 'one-off');
     this.title.set(item.title);
     this.category.set(item.category);
     this.amount.set(item.amount !== undefined ? String(item.amount) : '');
@@ -1527,6 +1555,7 @@ export class CostsComponent implements OnInit {
     this.editingId.set(null);
     this.selectedFile.set(null);
     this.status.set('paid');
+    this.frequency.set('one-off');
     this.title.set('');
     this.category.set('electricity');
     this.amount.set('');
@@ -1552,6 +1581,7 @@ export class CostsComponent implements OnInit {
           title: this.title().trim(),
           category: this.category(),
           status: this.status(),
+          frequency: this.frequency(),
           notes: this.notes().trim(),
           ...(parsedAmount !== undefined ? { amount: parsedAmount } : {}),
           ...(parsedDate ? { date: parsedDate } : {}),
@@ -1573,6 +1603,7 @@ export class CostsComponent implements OnInit {
       title: this.title().trim(),
       category: this.category(),
       status: this.status(),
+      frequency: this.frequency(),
       currency: 'EUR',
       notes: this.notes().trim(),
       amount: parsedAmount,

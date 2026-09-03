@@ -9,7 +9,7 @@ import {
   getDownloadURL, deleteObject, FirebaseStorage
 } from 'firebase/storage';
 import { Observable } from 'rxjs';
-import { CostCategory, CostFolder, CostItem, CostStatus, CustomCostCategory, CustomPayee } from '../models/cost-item.model';
+import { CostCategory, CostFolder, CostFrequency, CostItem, CostStatus, CustomCostCategory, CustomPayee } from '../models/cost-item.model';
 import { environment } from '../../../environments/environment';
 
 export interface CostUploadProgress {
@@ -21,6 +21,7 @@ export interface CostInput {
   title: string;
   category: CostCategory;
   status: CostStatus;
+  frequency: CostFrequency;
   amount?: number;
   currency: string;
   date?: Date;
@@ -81,6 +82,7 @@ export class CostsService {
             title: input.title,
             category: input.category,
             status: input.status,
+            frequency: input.frequency,
             currency: input.currency,
             notes: input.notes || '',
             ...(input.amount !== undefined ? { amount: input.amount } : {}),
@@ -177,7 +179,7 @@ export class CostsService {
 
   async updateCost(
     id: string,
-    updates: Partial<Pick<CostItem, 'title' | 'category' | 'status' | 'amount' | 'date' | 'payee' | 'contactName' | 'contactPhone' | 'contactEmail' | 'notes'>>
+    updates: Partial<Pick<CostItem, 'title' | 'category' | 'status' | 'frequency' | 'amount' | 'date' | 'payee' | 'contactName' | 'contactPhone' | 'contactEmail' | 'notes'>>
   ): Promise<void> {
     await updateDoc(doc(this.db, 'costs', id), { ...updates });
   }

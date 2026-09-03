@@ -1,6 +1,7 @@
 // A free-form slug — built-in categories below, plus whatever custom ones users add.
 export type CostCategory = string;
 export type CostStatus = 'paid' | 'planned';
+export type CostFrequency = 'one-off' | 'periodic';
 
 export interface CostCategoryMeta {
   value: CostCategory;
@@ -53,6 +54,7 @@ export interface CostItem {
   title: string;
   category: CostCategory;
   status: CostStatus;
+  frequency?: CostFrequency;
   amount?: number;
   currency: string;
   date?: Date;
