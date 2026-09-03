@@ -187,8 +187,8 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostFolder, CostFreque
               <p class="upload-hint">or drag a bill/invoice file here</p>
             </div>
           } @else {
-            <div class="upload-form">
-              <h3 class="form-title">{{ editingId() ? 'Edit item' : 'Add a bill or project' }}</h3>
+            <div class="upload-form" id="cost-form" [class.just-opened]="formJustOpened()">
+              <h3 class="form-title">{{ editingId() ? '✏️ Editing: ' + title() : 'Add a bill or project' }}</h3>
 
               <div class="form-row">
                 <div class="form-group">
@@ -782,8 +782,14 @@ import { COST_CATEGORIES, CostCategory, CostCategoryMeta, CostFolder, CostFreque
     .upload-text { font-size: 1rem; font-weight: 600; color: var(--text-primary); margin: 0.5rem 0 0.25rem; }
     .upload-hint { font-size: 0.85rem; color: var(--text-muted); margin: 0; }
 
-    .upload-form { padding: 1.5rem; }
+    .upload-form { padding: 1.5rem; scroll-margin-top: 5rem; }
     .form-title { font-size: 1.1rem; font-weight: 600; margin: 0 0 1rem; color: var(--text-primary); }
+
+    .upload-form.just-opened { animation: form-flash 1s ease-out; }
+    @keyframes form-flash {
+      0% { box-shadow: 0 0 0 3px var(--accent); background: var(--accent-subtle); }
+      100% { box-shadow: 0 0 0 0px transparent; }
+    }
 
     .form-row { display: flex; gap: 1rem; }
     .form-row .form-group { flex: 1; }
@@ -1119,6 +1125,7 @@ export class CostsComponent implements OnInit {
 
   items = signal<CostItem[]>([]);
   showForm = signal(false);
+  formJustOpened = signal(false);
   isDragging = signal(false);
   selectedFile = signal<File | null>(null);
   formError = signal('');
@@ -1491,6 +1498,7 @@ export class CostsComponent implements OnInit {
     this.contactEmail.set(item.contactEmail ?? '');
     this.notes.set(item.notes || '');
     this.showForm.set(true);
+    this.scrollToForm();
   }
 
   markDone(item: CostItem) {
@@ -1507,6 +1515,16 @@ export class CostsComponent implements OnInit {
     this.contactEmail.set(item.contactEmail ?? '');
     this.notes.set(item.notes || '');
     this.showForm.set(true);
+    this.scrollToForm();
+  }
+
+  private scrollToForm() {
+    this.formJustOpened.set(false);
+    setTimeout(() => {
+      document.getElementById('cost-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      this.formJustOpened.set(true);
+      setTimeout(() => this.formJustOpened.set(false), 1000);
+    });
   }
 
   private toDateDisplayValue(date: Date): string {
