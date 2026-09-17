@@ -21,6 +21,7 @@ import { buildInfo } from './build-info';
           <a routerLink="/tips" routerLinkActive="active">Tips</a>
           <a routerLink="/photos" routerLinkActive="active">Photos</a>
           <a routerLink="/costs" routerLinkActive="active">Costs</a>
+          <a routerLink="/dvds" routerLinkActive="active">DVDs</a>
           @if (auth.admin()) {
             <a routerLink="/admin" routerLinkActive="active">Admin</a>
           }

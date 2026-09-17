@@ -214,6 +214,14 @@ export class HomeComponent {
       icon: '💶',
       color: '#16a34a',
       gradient: 'linear-gradient(135deg, #16a34a, #4ade80)'
+    },
+    {
+      route: '/dvds',
+      title: 'DVD Library',
+      subtitle: 'Catalogue and search our film collection',
+      icon: '📀',
+      color: '#dc2626',
+      gradient: 'linear-gradient(135deg, #dc2626, #f87171)'
     }
   ];
 }
