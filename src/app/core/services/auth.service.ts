@@ -1,7 +1,7 @@
 import { Injectable, signal, computed } from '@angular/core';
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import {
-  getAuth, onAuthStateChanged, signInWithPopup,
+  getAuth, onAuthStateChanged, signInWithRedirect, getRedirectResult,
   GoogleAuthProvider, signOut, User, Auth
 } from 'firebase/auth';
 import type { Firestore } from 'firebase/firestore';
@@ -28,6 +28,12 @@ export class AuthService {
   constructor() {
     this.app = getApps().length ? getApps()[0] : initializeApp(environment.firebase);
     this.auth = getAuth(this.app);
+
+    // signInWithPopup relies on a cross-origin iframe channel that third-party-cookie
+    // blocking (Chrome's default, Safari ITP) breaks with an opaque DOMException — so
+    // sign-in uses a redirect instead. getRedirectResult just surfaces errors from that;
+    // onAuthStateChanged below is what actually picks up the signed-in user on return.
+    getRedirectResult(this.auth).catch(err => console.error('Google sign-in failed:', err));
 
     onAuthStateChanged(this.auth, async u => {
       this.user.set(u);
@@ -73,7 +79,7 @@ export class AuthService {
   }
 
   signInWithGoogle(): Promise<void> {
-    return signInWithPopup(this.auth, new GoogleAuthProvider()).then(() => {});
+    return signInWithRedirect(this.auth, new GoogleAuthProvider());
   }
 
   signOut(): Promise<void> {
