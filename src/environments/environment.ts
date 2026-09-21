@@ -5,7 +5,10 @@ export const environment = {
   production: false,
   firebase: {
     apiKey: 'AIzaSyACwe4MHPqEmerx1ZC3xa71O25uj919NUQ',
-    authDomain: 'app-50cb9.firebaseapp.com',
+    // Matches the actual Firebase Hosting domain (app-50cb9.web.app), not the default
+    // *.firebaseapp.com one — keeps Auth's sign-in iframe same-origin with the app, which
+    // Firefox/Safari/Chrome's storage-partitioning protections otherwise block outright.
+    authDomain: 'app-50cb9.web.app',
     projectId: 'app-50cb9',
     storageBucket: 'app-50cb9.firebasestorage.app',
     messagingSenderId: '100743146316',
