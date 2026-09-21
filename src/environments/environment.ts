@@ -10,5 +10,11 @@ export const environment = {
     storageBucket: 'app-50cb9.firebasestorage.app',
     messagingSenderId: '100743146316',
     appId: '1:100743146316:web:15959a5aa3a6ed4ef33de9'
-  }
+  },
+  // reCAPTCHA Enterprise site key for Firebase App Check, required to call the DVD scan's
+  // Gemini API (v3 Classic is no longer accepted for new App Check registrations). Create a
+  // Web key at https://console.cloud.google.com/security/recaptcha (score-based, not
+  // checkbox), then register that same key in Firebase Console → App Check → your web app.
+  // See README "Enable Firebase AI Logic" step.
+  recaptchaSiteKey: '6LeuFMctAAAAAKZeHNRGjlpW2yaicTUZymri_ybH'
 };

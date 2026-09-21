@@ -48,6 +48,8 @@ export class DvdsService {
   scanning = signal(false);
   scanError = signal('');
 
+  private appCheckInitialized = false;
+
   constructor() {
     this.app = getApps().length ? getApps()[0] : initializeApp(environment.firebase);
     this.db = getFirestore(this.app);
@@ -224,6 +226,8 @@ export class DvdsService {
     this.scanError.set('');
 
     try {
+      await this.ensureAppCheck();
+
       const { getAI, getGenerativeModel, GoogleAIBackend, Schema } = await import('firebase/ai');
 
       const ai = getAI(this.app, { backend: new GoogleAIBackend() });
@@ -273,6 +277,31 @@ export class DvdsService {
     } finally {
       this.scanning.set(false);
     }
+  }
+
+  /**
+   * The Gemini API (fronted by Firebase AI Logic) requires a valid App Check token on every
+   * request — Google now mandates reCAPTCHA Enterprise as the web attestation provider (v3
+   * Classic is no longer accepted for new App Check registrations). Initialized once, lazily —
+   * only scanning needs this, everything else (Firestore/Storage) works fine without it. In dev,
+   * falls back to the App Check debug provider (localhost can't be added to a production
+   * reCAPTCHA Enterprise key), whose token must be registered once in Firebase Console →
+   * App Check → debug tokens.
+   */
+  private async ensureAppCheck(): Promise<void> {
+    if (this.appCheckInitialized) return;
+    this.appCheckInitialized = true;
+
+    const { initializeAppCheck, ReCaptchaEnterpriseProvider } = await import('firebase/app-check');
+
+    if (!environment.production) {
+      (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    }
+
+    initializeAppCheck(this.app, {
+      provider: new ReCaptchaEnterpriseProvider(environment.recaptchaSiteKey),
+      isTokenAutoRefreshEnabled: true,
+    });
   }
 
   private fileToInlineData(file: File): Promise<{ data: string; mimeType: string }> {
