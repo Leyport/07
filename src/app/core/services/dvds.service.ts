@@ -232,7 +232,7 @@ export class DvdsService {
 
       const ai = getAI(this.app, { backend: new GoogleAIBackend() });
       const model = getGenerativeModel(ai, {
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.6-flash',
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: Schema.array({
