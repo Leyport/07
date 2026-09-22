@@ -228,9 +228,12 @@ export class DvdsService {
     try {
       await this.ensureAppCheck();
 
-      const { getAI, getGenerativeModel, GoogleAIBackend, Schema } = await import('firebase/ai');
+      // Vertex AI backend bills through this project's own linked Cloud Billing account
+      // (this project is on the Blaze plan) rather than the Gemini Developer API's separate
+      // AI Studio Prepay system, which has been unreliable for this project.
+      const { getAI, getGenerativeModel, VertexAIBackend, Schema } = await import('firebase/ai');
 
-      const ai = getAI(this.app, { backend: new GoogleAIBackend() });
+      const ai = getAI(this.app, { backend: new VertexAIBackend() });
       const model = getGenerativeModel(ai, {
         model: 'gemini-3.6-flash',
         generationConfig: {
