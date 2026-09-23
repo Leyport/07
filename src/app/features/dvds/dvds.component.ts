@@ -414,7 +414,8 @@ interface ScanRow extends DvdScanCandidate {
               <span class="carousel-counter">{{ lightboxIndex()! + 1 }} / {{ carouselItems().length }}</span>
               <button class="carousel-close" (click)="closeLightbox()">✕</button>
             </div>
-            <img class="carousel-media" [src]="lightboxItem()!.photoUrl" [alt]="lightboxItem()!.title" />
+            <img class="carousel-media" [class.editable]="auth.canWrite()" [src]="lightboxItem()!.photoUrl" [alt]="lightboxItem()!.title"
+              [title]="auth.canWrite() ? 'Click to edit' : ''" (click)="editFromCarousel()" />
             <div class="carousel-caption">{{ lightboxItem()!.title }}{{ lightboxItem()!.year ? ' (' + lightboxItem()!.year + ')' : '' }}</div>
           </div>
 
@@ -770,6 +771,7 @@ interface ScanRow extends DvdScanCandidate {
     }
     .carousel-close:hover { background: rgba(255,255,255,0.3); }
     .carousel-media { display: block; max-width: min(92vw, 700px); max-height: 78vh; object-fit: contain; border-radius: 8px; }
+    .carousel-media.editable { cursor: pointer; }
     .carousel-caption { margin-top: 0.75rem; font-size: 0.9rem; color: rgba(255,255,255,0.75); text-align: center; max-width: 560px; }
     .carousel-nav {
       position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.15);
@@ -1068,6 +1070,14 @@ export class DvdsComponent implements OnInit {
   }
 
   closeLightbox() { this.lightboxIndex.set(null); }
+
+  editFromCarousel() {
+    if (!this.auth.canWrite()) return;
+    const item = this.lightboxItem();
+    if (!item) return;
+    this.closeLightbox();
+    this.startEdit(item);
+  }
 
   nextItem() {
     const i = this.lightboxIndex();
