@@ -1,0 +1,80 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function myUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // "Approved" covers both explicitly-approved users and admins (admins are always
+    // implicitly allowed to write, without needing an admin: true check everywhere).
+    function isApproved() {
+      return isSignedIn() && (myUser().approved == true || myUser().admin == true);
+    }
+
+    function isAdmin() {
+      return isSignedIn() && myUser().admin == true;
+    }
+
+    // Access-request records (auth.service.ts) — a user can read/create only their own
+    // doc, always starting unapproved; only an admin can approve/revoke/promote someone
+    // (via users.service.ts). Reading the full collection (needed for the admin approval
+    // screen) is restricted to admins only — the admin page's own UI check is not a
+    // security boundary on its own, since Firestore is queried directly from the browser.
+    match /users/{uid} {
+      allow get: if isSignedIn() && request.auth.uid == uid;
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.approved == false
+        && request.resource.data.admin == false;
+      allow update, delete: if isAdmin();
+    }
+
+    // Every feature area shares the same shape: browsing (including the photo/video
+    // gallery, cost items, and the DVD library) is open to everyone, matching this
+    // being a family site where only edits need sign-in; writes require an approved
+    // account. Each feature's supporting lookup collections (categories/genres/
+    // folders/payees) follow the same rule as their parent collection.
+    match /media/{id} {
+      allow read: if true;
+      allow write: if isApproved();
+    }
+
+    match /costs/{id} {
+      allow read: if true;
+      allow write: if isApproved();
+    }
+    match /costCategories/{id} {
+      allow read: if true;
+      allow write: if isApproved();
+    }
+    match /costPayees/{id} {
+      allow read: if true;
+      allow write: if isApproved();
+    }
+    match /costFolders/{id} {
+      allow read: if true;
+      allow write: if isApproved();
+    }
+
+    match /dvds/{id} {
+      allow read: if true;
+      allow write: if isApproved();
+    }
+    match /dvdGenres/{id} {
+      allow read: if true;
+      allow write: if isApproved();
+    }
+    match /dvdFolders/{id} {
+      allow read: if true;
+      allow write: if isApproved();
+    }
+
+    // Everything else is denied by default.
+  }
+}
