@@ -34,6 +34,15 @@ export interface DvdScanCandidate {
   genre: DvdGenre;
   summary: string;
   director?: string;
+  /** A crop of the source photo around just this disc's case, if Gemini could locate it. */
+  thumbnailBlob?: Blob;
+}
+
+interface ScanBoundingBox {
+  yMin: number;
+  xMin: number;
+  yMax: number;
+  xMax: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -91,13 +100,17 @@ export class DvdsService {
     });
   }
 
-  /** Saves one disc with a photo attached — used by the manual "add" form when the user wants a picture of that specific case. */
-  addDvdWithPhoto(input: DvdInput, file: File): Observable<DvdUploadProgress> {
+  /**
+   * Saves one disc with a photo attached — used by the manual "add" form when the user wants
+   * a picture of that specific case, and by the scan-review flow's per-disc cropped thumbnails
+   * (a plain Blob, not a File, since those are cropped client-side rather than user-selected).
+   */
+  addDvdWithPhoto(input: DvdInput, file: File | Blob): Observable<DvdUploadProgress> {
     return new Observable(observer => {
       this.uploading.set(true);
 
-      const ext = file.name.split('.').pop();
-      const photoPath = `dvds/${Date.now()}.${ext}`;
+      const ext = (file.type.split('/')[1] || 'jpg').split('+')[0];
+      const photoPath = `dvds/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
       const storageRef = ref(this.storage, photoPath);
       const uploadTask = uploadBytesResumable(storageRef, file);
 
@@ -254,8 +267,15 @@ export class DvdsService {
                 }),
                 summary: Schema.string({ description: 'A 2-3 sentence plot summary, no spoilers for the ending.' }),
                 director: Schema.string({ description: 'The director\'s name, if known.' }),
+                boundingBox: Schema.object({
+                  description: 'A tight box around just this disc\'s case in the photo, normalized to a 0-1000 scale where (0,0) is the top-left corner and (1000,1000) is the bottom-right corner.',
+                  properties: {
+                    yMin: Schema.integer(), xMin: Schema.integer(),
+                    yMax: Schema.integer(), xMax: Schema.integer(),
+                  }
+                }),
               },
-              optionalProperties: ['year', 'director'],
+              optionalProperties: ['year', 'director', 'boundingBox'],
             })
           })
         }
@@ -266,13 +286,27 @@ export class DvdsService {
         const inlineData = await this.fileToInlineData(file);
         const prompt = 'This photo shows one or more physical DVD, Blu-ray, or box-set cases (front cover or spine). ' +
           'Identify each distinct film or TV box-set you can see. Ignore duplicates of the same title. ' +
-          'For each one, return its title, best-guess release year, one genre from the allowed list, a short plot summary, and the director if you know it.';
+          'For each one, return its title, best-guess release year, one genre from the allowed list, a short plot summary, ' +
+          'the director if you know it, and a tight bounding box around just that disc\'s case.';
 
         const result = await model.generateContent([prompt, { inlineData }]);
         const text = result.response.text();
         try {
-          const parsed = JSON.parse(text) as DvdScanCandidate[];
-          results.push(...parsed);
+          const parsed = JSON.parse(text) as (DvdScanCandidate & { boundingBox?: ScanBoundingBox })[];
+          let bitmap: ImageBitmap | null = null;
+
+          for (const item of parsed) {
+            if (item.boundingBox) {
+              bitmap ??= await createImageBitmap(file).catch(() => null);
+              if (bitmap) {
+                item.thumbnailBlob = (await this.cropThumbnail(bitmap, item.boundingBox)) ?? undefined;
+              }
+              delete item.boundingBox;
+            }
+            results.push(item);
+          }
+
+          bitmap?.close();
         } catch {
           // Skip a photo Gemini couldn't return valid JSON for rather than failing the whole batch.
         }
@@ -310,6 +344,23 @@ export class DvdsService {
       provider: new ReCaptchaEnterpriseProvider(environment.recaptchaSiteKey),
       isTokenAutoRefreshEnabled: true,
     });
+  }
+
+  /** Crops a 0-1000-normalized bounding box out of a decoded photo into a small JPEG thumbnail. */
+  private cropThumbnail(bitmap: ImageBitmap, box: ScanBoundingBox, maxDim = 480): Promise<Blob | null> {
+    const x = Math.max(0, Math.round((box.xMin / 1000) * bitmap.width));
+    const y = Math.max(0, Math.round((box.yMin / 1000) * bitmap.height));
+    const w = Math.min(bitmap.width - x, Math.round(((box.xMax - box.xMin) / 1000) * bitmap.width));
+    const h = Math.min(bitmap.height - y, Math.round(((box.yMax - box.yMin) / 1000) * bitmap.height));
+    if (w <= 0 || h <= 0) return Promise.resolve(null);
+
+    const scale = Math.min(1, maxDim / Math.max(w, h));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(w * scale);
+    canvas.height = Math.round(h * scale);
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(bitmap, x, y, w, h, 0, 0, canvas.width, canvas.height);
+    return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
   }
 
   private fileToInlineData(file: File): Promise<{ data: string; mimeType: string }> {

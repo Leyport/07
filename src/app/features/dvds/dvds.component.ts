@@ -6,6 +6,8 @@ import { DVD_GENRES, DvdFolder, DvdFormat, DvdGenre, DvdGenreMeta, DvdItem, Cust
 /** A scan result awaiting user review, with a local id so it can be edited/removed before saving. */
 interface ScanRow extends DvdScanCandidate {
   rowId: string;
+  /** Object URL for previewing thumbnailBlob — revoked once the row is removed or saved. */
+  thumbnailPreviewUrl?: string;
 }
 
 @Component({
@@ -186,6 +188,9 @@ interface ScanRow extends DvdScanCandidate {
                 <div class="scan-rows">
                   @for (row of scanResults(); track row.rowId) {
                     <div class="scan-row">
+                      @if (row.thumbnailPreviewUrl) {
+                        <img class="scan-row-thumb" [src]="row.thumbnailPreviewUrl" [alt]="row.title" />
+                      }
                       <button type="button" class="scan-remove" (click)="removeScanRow(row.rowId)" title="Discard">✕</button>
                       <div class="scan-row-fields">
                         <input [value]="row.title" (input)="updateScanRow(row.rowId, { title: $any($event.target).value })"
@@ -530,6 +535,10 @@ interface ScanRow extends DvdScanCandidate {
       display: flex; gap: 0.5rem; align-items: flex-start;
       background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 0.85rem;
     }
+    .scan-row-thumb {
+      flex-shrink: 0; width: 56px; aspect-ratio: 2 / 3; object-fit: cover;
+      border-radius: 6px; background: var(--hover);
+    }
     .scan-row-fields { flex: 1; display: flex; flex-direction: column; gap: 0.5rem; }
     .scan-year { max-width: 90px; flex: 0 0 auto; }
     .scan-remove {
@@ -872,7 +881,11 @@ export class DvdsComponent implements OnInit {
   async scanFiles(files: File[]) {
     this.showScanPanel.set(true);
     const found = await this.dvdsService.scanPhotos(files);
-    const rows: ScanRow[] = found.map((c, i) => ({ ...c, rowId: `${Date.now()}-${i}` }));
+    const rows: ScanRow[] = found.map((c, i) => ({
+      ...c,
+      rowId: `${Date.now()}-${i}`,
+      thumbnailPreviewUrl: c.thumbnailBlob ? URL.createObjectURL(c.thumbnailBlob) : undefined,
+    }));
     this.scanResults.update(existing => [...existing, ...rows]);
   }
 
@@ -881,13 +894,31 @@ export class DvdsComponent implements OnInit {
   }
 
   removeScanRow(rowId: string) {
+    const row = this.scanResults().find(r => r.rowId === rowId);
+    if (row?.thumbnailPreviewUrl) URL.revokeObjectURL(row.thumbnailPreviewUrl);
     this.scanResults.update(rows => rows.filter(r => r.rowId !== rowId));
   }
 
   cancelScan() {
+    for (const row of this.scanResults()) {
+      if (row.thumbnailPreviewUrl) URL.revokeObjectURL(row.thumbnailPreviewUrl);
+    }
     this.showScanPanel.set(false);
     this.scanResults.set([]);
     this.dvdsService.scanError.set('');
+  }
+
+  private saveOneDvd(input: DvdInput, photo?: Blob): Promise<void> {
+    if (!photo) return this.dvdsService.addDvd(input);
+    return new Promise((resolve, reject) => {
+      this.dvdsService.addDvdWithPhoto(input, photo).subscribe({
+        next: result => {
+          if (result.error) reject(new Error(result.error));
+          else if (result.progress === 100) resolve();
+        },
+        error: reject,
+      });
+    });
   }
 
   async saveScanResults() {
@@ -897,7 +928,7 @@ export class DvdsComponent implements OnInit {
     const addedBy = this.auth.user()?.displayName || this.auth.user()?.email || undefined;
     try {
       for (const row of rows) {
-        await this.dvdsService.addDvd({
+        await this.saveOneDvd({
           title: row.title.trim(),
           year: row.year,
           genre: row.genre,
@@ -905,7 +936,7 @@ export class DvdsComponent implements OnInit {
           summary: row.summary.trim(),
           director: row.director?.trim() || undefined,
           addedBy,
-        });
+        }, row.thumbnailBlob);
       }
       this.cancelScan();
     } catch (err: any) {
