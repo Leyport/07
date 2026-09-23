@@ -233,7 +233,9 @@ export class DvdsService {
       // AI Studio Prepay system, which has been unreliable for this project.
       const { getAI, getGenerativeModel, VertexAIBackend, Schema } = await import('firebase/ai');
 
-      const ai = getAI(this.app, { backend: new VertexAIBackend() });
+      // 'global' rather than the SDK's default 'us-central1' — Google recommends it for
+      // most models and it's where newer models are actually published first.
+      const ai = getAI(this.app, { backend: new VertexAIBackend('global') });
       const model = getGenerativeModel(ai, {
         // Vertex AI's publisher model catalog differs from the Gemini Developer API's —
         // gemini-3.6-flash isn't published there. gemini-3.5-flash-lite is a current,
