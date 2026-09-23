@@ -235,7 +235,10 @@ export class DvdsService {
 
       const ai = getAI(this.app, { backend: new VertexAIBackend() });
       const model = getGenerativeModel(ai, {
-        model: 'gemini-3.6-flash',
+        // Vertex AI's publisher model catalog differs from the Gemini Developer API's —
+        // gemini-3.6-flash isn't published there. gemini-3.5-flash-lite is a current,
+        // stable, general-use model available in regional (non-"global") locations.
+        model: 'gemini-3.5-flash-lite',
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: Schema.array({
