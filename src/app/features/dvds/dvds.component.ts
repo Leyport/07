@@ -898,6 +898,8 @@ export class DvdsComponent implements OnInit {
         });
       }
       this.cancelScan();
+    } catch (err: any) {
+      this.dvdsService.scanError.set(err.message || 'Something went wrong saving those discs.');
     } finally {
       this.scanSaving.set(false);
     }
