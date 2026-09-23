@@ -8,5 +8,6 @@ export const environment = {
     messagingSenderId: '100743146316',
     appId: '1:100743146316:web:15959a5aa3a6ed4ef33de9'
   },
-  recaptchaSiteKey: '6LeuFMctAAAAAKZeHNRGjlpW2yaicTUZymri_ybH'
+  recaptchaSiteKey: '6LeuFMctAAAAAKZeHNRGjlpW2yaicTUZymri_ybH',
+  tmdbAccessToken: 'YOUR_TMDB_READ_ACCESS_TOKEN'
 };

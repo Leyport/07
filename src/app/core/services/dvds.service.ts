@@ -2,7 +2,7 @@ import { Injectable, signal } from '@angular/core';
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import {
   getFirestore, collection, getDocs, addDoc, deleteDoc,
-  doc, query, orderBy, onSnapshot, updateDoc, setDoc, Firestore
+  doc, query, orderBy, onSnapshot, updateDoc, setDoc, deleteField, Firestore
 } from 'firebase/firestore';
 import {
   getStorage, ref, uploadBytesResumable,
@@ -25,6 +25,13 @@ export interface DvdInput {
   summary: string;
   director?: string;
   addedBy?: string;
+  /** A hotlinked poster URL (from searchPosters) chosen before the disc even exists yet. */
+  photoUrl?: string;
+}
+
+/** One poster option from TMDb, at thumbnail size for the picker grid. */
+export interface PosterOption {
+  url: string;
 }
 
 /** One candidate film found on a scanned photo, awaiting user review before it's saved. */
@@ -95,6 +102,7 @@ export class DvdsService {
       ...(input.year !== undefined ? { year: input.year } : {}),
       ...(input.director ? { director: input.director } : {}),
       ...(input.addedBy ? { addedBy: input.addedBy } : {}),
+      ...(input.photoUrl ? { photoUrl: input.photoUrl } : {}),
       addedAt: new Date(),
       order: existing.size
     });
@@ -167,6 +175,58 @@ export class DvdsService {
     await updateDoc(doc(this.db, 'dvds', id), { ...updates });
   }
 
+  /** Attaches or replaces an existing disc's own photo — uploads a new file, removes any prior one. */
+  updateDvdPhoto(id: string, file: File | Blob, oldPhotoPath?: string | null): Observable<DvdUploadProgress> {
+    return new Observable(observer => {
+      this.uploading.set(true);
+
+      const ext = (file.type.split('/')[1] || 'jpg').split('+')[0];
+      const photoPath = `dvds/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const storageRef = ref(this.storage, photoPath);
+      const uploadTask = uploadBytesResumable(storageRef, file);
+
+      uploadTask.on(
+        'state_changed',
+        snapshot => {
+          const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+          this.uploadProgress.set(progress);
+          observer.next({ progress });
+        },
+        error => {
+          this.uploading.set(false);
+          observer.next({ progress: 0, error: error.message });
+          observer.complete();
+        },
+        async () => {
+          try {
+            const photoUrl = await getDownloadURL(uploadTask.snapshot.ref);
+            if (oldPhotoPath) {
+              await deleteObject(ref(this.storage, oldPhotoPath)).catch(() => {});
+            }
+            await updateDoc(doc(this.db, 'dvds', id), { photoUrl, photoPath });
+
+            this.uploading.set(false);
+            this.uploadProgress.set(0);
+            observer.next({ progress: 100 });
+            observer.complete();
+          } catch (err: any) {
+            this.uploading.set(false);
+            observer.next({ progress: 0, error: err.message });
+            observer.complete();
+          }
+        }
+      );
+    });
+  }
+
+  /** Sets an existing disc's photo to a hotlinked URL (a chosen TMDb poster) instead of an uploaded file. */
+  async setPhotoUrl(id: string, photoUrl: string, oldPhotoPath?: string | null): Promise<void> {
+    if (oldPhotoPath) {
+      await deleteObject(ref(this.storage, oldPhotoPath)).catch(() => {});
+    }
+    await updateDoc(doc(this.db, 'dvds', id), { photoUrl, photoPath: deleteField() });
+  }
+
   async moveToFolder(dvdId: string, folderId: string | null): Promise<void> {
     await updateDoc(doc(this.db, 'dvds', dvdId), { folderId });
   }
@@ -227,6 +287,36 @@ export class DvdsService {
 
   async deleteFolder(id: string): Promise<void> {
     await deleteDoc(doc(this.db, 'dvdFolders', id));
+  }
+
+  /**
+   * Looks up a film on TMDb by title (+ year, if known) and returns its available poster
+   * artwork as thumbnail-sized image URLs, best-rated first, for a "pick one" grid. Hotlinks
+   * TMDb's own image CDN rather than downloading/re-hosting — that's what it's there for.
+   */
+  async searchPosters(title: string, year?: number): Promise<PosterOption[]> {
+    const headers = { Authorization: `Bearer ${environment.tmdbAccessToken}`, accept: 'application/json' };
+
+    const searchUrl = new URL('https://api.themoviedb.org/3/search/movie');
+    searchUrl.searchParams.set('query', title);
+    if (year) searchUrl.searchParams.set('year', String(year));
+
+    const searchRes = await fetch(searchUrl, { headers });
+    if (!searchRes.ok) throw new Error(`TMDb search failed (${searchRes.status}).`);
+    const searchData = await searchRes.json();
+    const match = searchData.results?.[0];
+    if (!match) return [];
+
+    const imagesRes = await fetch(`https://api.themoviedb.org/3/movie/${match.id}/images`, { headers });
+    if (!imagesRes.ok) throw new Error(`TMDb images lookup failed (${imagesRes.status}).`);
+    const imagesData = await imagesRes.json();
+
+    const posters = (imagesData.posters ?? []) as { file_path: string; vote_average: number; iso_639_1: string | null }[];
+    return posters
+      .filter(p => p.iso_639_1 === 'en' || p.iso_639_1 === null)
+      .sort((a, b) => b.vote_average - a.vote_average)
+      .slice(0, 6)
+      .map(p => ({ url: `https://image.tmdb.org/t/p/w342${p.file_path}` }));
   }
 
   /**

@@ -1,5 +1,5 @@
 import { Component, inject, signal, computed, OnInit } from '@angular/core';
-import { DvdsService, DvdInput, DvdScanCandidate } from '../../core/services/dvds.service';
+import { DvdsService, DvdInput, DvdScanCandidate, PosterOption } from '../../core/services/dvds.service';
 import { AuthService } from '../../core/services/auth.service';
 import { DVD_GENRES, DvdFolder, DvdFormat, DvdGenre, DvdGenreMeta, DvdItem, CustomDvdGenre } from '../../core/models/dvd-item.model';
 
@@ -273,19 +273,49 @@ interface ScanRow extends DvdScanCandidate {
                 <textarea [value]="summary()" (input)="summary.set($any($event.target).value)" placeholder="A short plot summary..." class="form-input" rows="3"></textarea>
               </div>
 
-              @if (!editingId()) {
-                <div class="form-group">
-                  <label>Photo <span class="label-hint">(optional — a picture of this specific case)</span></label>
+              <div class="form-group">
+                <label>Photo <span class="label-hint">(optional)</span></label>
+
+                @if (pendingPhotoUrl()) {
+                  <div class="current-photo">
+                    <img [src]="pendingPhotoUrl()" alt="Selected poster" />
+                    <span>✅ Poster selected — will replace {{ editingId() ? 'the current photo' : 'any file chosen above' }}</span>
+                  </div>
+                } @else if (editingPhotoUrl() && !selectedFile()) {
+                  <div class="current-photo">
+                    <img [src]="editingPhotoUrl()" alt="Current photo" />
+                    <span>Current photo — choose a new one below to replace it</span>
+                  </div>
+                }
+
+                <div class="photo-actions">
                   <div class="file-drop" [class.has-file]="selectedFile()" (click)="fileInput.click()">
                     @if (selectedFile()) {
                       <span>✅ {{ selectedFile()!.name }}</span>
                     } @else {
-                      <span>📁 Choose a photo...</span>
+                      <span>📁 Choose your own photo...</span>
                     }
                     <input #fileInput type="file" accept="image/*" (change)="onFileSelected($event)" hidden />
                   </div>
+                  <button type="button" class="btn-secondary" (click)="searchPosters()" [disabled]="posterSearching() || !title().trim()">
+                    {{ posterSearching() ? 'Searching…' : '🖼️ Find posters online' }}
+                  </button>
                 </div>
-              }
+
+                @if (posterError()) { <p class="error-text">{{ posterError() }}</p> }
+
+                @if (posterOptions().length > 0) {
+                  <div class="poster-grid">
+                    @for (p of posterOptions(); track p.url) {
+                      <button type="button" class="poster-option" (click)="selectPoster(p.url)" title="Use this poster">
+                        <img [src]="p.url" alt="Poster option" />
+                      </button>
+                    }
+                  </div>
+                } @else if (posterSearched() && !posterSearching()) {
+                  <p class="hint-text">No posters found for that title.</p>
+                }
+              </div>
 
               @if (dvdsService.uploading()) {
                 <div class="progress-bar">
@@ -581,6 +611,29 @@ interface ScanRow extends DvdScanCandidate {
     }
     .file-drop:hover { border-color: #dc2626; }
     .file-drop.has-file { color: var(--text-primary); border-color: #dc2626; }
+    .file-drop { flex: 1; min-width: 0; }
+
+    .photo-actions { display: flex; gap: 0.75rem; align-items: stretch; margin-bottom: 0.6rem; }
+    .photo-actions .btn-secondary { flex-shrink: 0; white-space: nowrap; }
+
+    .current-photo {
+      display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;
+      padding: 0.5rem; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    }
+    .current-photo img { width: 44px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
+    .current-photo span { font-size: 0.8rem; color: var(--text-secondary); }
+
+    .poster-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+      gap: 0.6rem; margin-top: 0.75rem;
+    }
+    .poster-option {
+      padding: 0; border: 2px solid var(--border); border-radius: 8px; background: none;
+      cursor: pointer; overflow: hidden; transition: border-color 0.15s;
+    }
+    .poster-option:hover { border-color: #dc2626; }
+    .poster-option img { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; display: block; }
+    .hint-text { color: var(--text-muted); font-size: 0.85rem; margin: 0.5rem 0 0; }
 
     .progress-bar { height: 6px; background: var(--border); border-radius: 3px; margin: 1rem 0 0.25rem; overflow: hidden; }
     .progress-fill { height: 100%; background: #dc2626; border-radius: 3px; transition: width 0.3s; }
@@ -956,6 +1009,14 @@ export class DvdsComponent implements OnInit {
   deletingItem = signal<DvdItem | null>(null);
   lightboxItem = signal<DvdItem | null>(null);
 
+  editingPhotoUrl = signal<string | undefined>(undefined);
+  editingPhotoPath = signal<string | null>(null);
+  pendingPhotoUrl = signal<string | null>(null);
+  posterOptions = signal<PosterOption[]>([]);
+  posterSearching = signal(false);
+  posterSearched = signal(false);
+  posterError = signal('');
+
   title = signal('');
   year = signal('');
   genre = signal<DvdGenre>('other');
@@ -973,7 +1034,35 @@ export class DvdsComponent implements OnInit {
 
   onFileSelected(event: Event) {
     const file = (event.target as HTMLInputElement).files?.[0];
-    if (file) this.selectedFile.set(file);
+    if (file) {
+      this.selectedFile.set(file);
+      this.pendingPhotoUrl.set(null);
+      this.posterOptions.set([]);
+    }
+  }
+
+  async searchPosters() {
+    if (!this.title().trim()) return;
+    this.posterSearching.set(true);
+    this.posterSearched.set(false);
+    this.posterError.set('');
+    this.posterOptions.set([]);
+    try {
+      const year = this.year().trim() ? Number(this.year()) : undefined;
+      const options = await this.dvdsService.searchPosters(this.title().trim(), year);
+      this.posterOptions.set(options);
+    } catch (err: any) {
+      this.posterError.set(err.message || 'Could not search for posters.');
+    } finally {
+      this.posterSearching.set(false);
+      this.posterSearched.set(true);
+    }
+  }
+
+  selectPoster(url: string) {
+    this.pendingPhotoUrl.set(url);
+    this.selectedFile.set(null);
+    this.posterOptions.set([]);
   }
 
   startEdit(item: DvdItem) {
@@ -984,6 +1073,13 @@ export class DvdsComponent implements OnInit {
     this.format.set(item.format);
     this.director.set(item.director ?? '');
     this.summary.set(item.summary || '');
+    this.editingPhotoUrl.set(item.photoUrl);
+    this.editingPhotoPath.set(item.photoPath ?? null);
+    this.selectedFile.set(null);
+    this.pendingPhotoUrl.set(null);
+    this.posterOptions.set([]);
+    this.posterSearched.set(false);
+    this.posterError.set('');
     this.showForm.set(true);
     this.scrollToForm();
   }
@@ -1001,6 +1097,13 @@ export class DvdsComponent implements OnInit {
     this.showForm.set(false);
     this.editingId.set(null);
     this.selectedFile.set(null);
+    this.pendingPhotoUrl.set(null);
+    this.editingPhotoUrl.set(undefined);
+    this.editingPhotoPath.set(null);
+    this.posterOptions.set([]);
+    this.posterSearching.set(false);
+    this.posterSearched.set(false);
+    this.posterError.set('');
     this.title.set('');
     this.year.set('');
     this.genre.set('other');
@@ -1010,15 +1113,30 @@ export class DvdsComponent implements OnInit {
     this.formError.set('');
   }
 
+  private uploadPhotoTo(id: string, file: File | Blob): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.dvdsService.updateDvdPhoto(id, file, this.editingPhotoPath()).subscribe({
+        next: result => {
+          if (result.error) reject(new Error(result.error));
+          else if (result.progress === 100) resolve();
+        },
+        error: reject,
+      });
+    });
+  }
+
   async submit() {
     if (!this.title().trim()) return;
     this.formError.set('');
 
     const parsedYear = this.year().trim() ? Number(this.year()) : undefined;
+    const file = this.selectedFile();
+    const posterUrl = this.pendingPhotoUrl();
 
     if (this.editingId()) {
+      const id = this.editingId()!;
       try {
-        await this.dvdsService.updateDvd(this.editingId()!, {
+        await this.dvdsService.updateDvd(id, {
           title: this.title().trim(),
           genre: this.genre(),
           format: this.format(),
@@ -1026,6 +1144,13 @@ export class DvdsComponent implements OnInit {
           director: this.director().trim() || undefined,
           ...(parsedYear !== undefined ? { year: parsedYear } : {}),
         });
+
+        if (file) {
+          await this.uploadPhotoTo(id, file);
+        } else if (posterUrl) {
+          await this.dvdsService.setPhotoUrl(id, posterUrl, this.editingPhotoPath());
+        }
+
         this.cancelForm();
       } catch (err: any) {
         this.formError.set(err.message);
@@ -1042,9 +1167,9 @@ export class DvdsComponent implements OnInit {
       year: parsedYear,
       director: this.director().trim() || undefined,
       addedBy,
+      ...(posterUrl && !file ? { photoUrl: posterUrl } : {}),
     };
 
-    const file = this.selectedFile();
     if (file) {
       this.dvdsService.addDvdWithPhoto(input, file).subscribe({
         next: result => {
