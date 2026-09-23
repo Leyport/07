@@ -1071,12 +1071,18 @@ export class DvdsComponent implements OnInit {
 
   closeLightbox() { this.lightboxIndex.set(null); }
 
+  /** Set while editing a disc opened from the carousel, so cancelling/saving reopens it there. */
+  private returnToCarouselIndex: number | null = null;
+
   editFromCarousel() {
     if (!this.auth.canWrite()) return;
     const item = this.lightboxItem();
     if (!item) return;
+    const index = this.lightboxIndex();
     this.closeLightbox();
     this.startEdit(item);
+    // After startEdit, which itself clears any stale value from a previous edit session.
+    this.returnToCarouselIndex = index;
   }
 
   nextItem() {
@@ -1159,6 +1165,7 @@ export class DvdsComponent implements OnInit {
   }
 
   startEdit(item: DvdItem) {
+    this.returnToCarouselIndex = null;
     this.editingId.set(item.id);
     this.title.set(item.title);
     this.year.set(item.year !== undefined ? String(item.year) : '');
@@ -1204,6 +1211,14 @@ export class DvdsComponent implements OnInit {
     this.director.set('');
     this.summary.set('');
     this.formError.set('');
+
+    if (this.returnToCarouselIndex !== null) {
+      // Clamp in case the edit itself changed what's visible (e.g. moved out of the folder/
+      // genre currently filtered on), so the carousel still has a valid disc to reopen on.
+      const clamped = Math.min(this.returnToCarouselIndex, this.carouselItems().length - 1);
+      this.returnToCarouselIndex = null;
+      if (clamped >= 0) this.lightboxIndex.set(clamped);
+    }
   }
 
   private uploadPhotoTo(id: string, file: File | Blob): Promise<void> {
