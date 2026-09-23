@@ -35,6 +35,49 @@ interface ScanRow extends DvdScanCandidate {
         }
       </div>
 
+      <!-- Library grid -->
+      @if (visibleItems().length > 0) {
+        <div class="dvd-grid">
+          @for (item of visibleItems(); track item.id) {
+            <div class="dvd-card">
+              <div class="dvd-poster" [style.background]="item.photoUrl ? null : genreBg(item.genre)" (click)="item.photoUrl ? openLightbox(item) : null">
+                @if (item.photoUrl) {
+                  <img [src]="item.photoUrl" [alt]="item.title" loading="lazy" />
+                } @else {
+                  <span class="dvd-poster-icon">{{ genreMeta(item.genre).icon }}</span>
+                }
+                <span class="dvd-format-badge">{{ formatLabel(item.format) }}</span>
+              </div>
+              <div class="dvd-info">
+                <h3 class="dvd-title">{{ item.title }}{{ item.year ? ' (' + item.year + ')' : '' }}</h3>
+                <div class="dvd-genre-badge" [style.background]="genreBg(item.genre)" [style.color]="genreMeta(item.genre).color">
+                  {{ genreMeta(item.genre).icon }} {{ genreMeta(item.genre).label }}
+                </div>
+                @if (item.director) { <p class="dvd-director">Dir. {{ item.director }}</p> }
+                @if (item.summary) { <p class="dvd-summary">{{ item.summary }}</p> }
+                @if (item.folderId) { <p class="dvd-folder">📁 {{ folderName(item.folderId) }}</p> }
+              </div>
+              @if (auth.canWrite()) {
+                <div class="dvd-actions">
+                  <select class="folder-select" [value]="item.folderId || ''" (change)="moveItem(item, $any($event.target).value)" title="Move to folder">
+                    <option value="">📥 Unfiled</option>
+                    @for (f of customFolders(); track f.id) {
+                      <option [value]="f.id">📁 {{ f.name }}</option>
+                    }
+                  </select>
+                  <button class="action-btn" (click)="startEdit(item)" title="Edit">✏️</button>
+                  <button class="action-btn danger" (click)="confirmDelete(item)" title="Delete">🗑️</button>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      } @else if (items().length > 0) {
+        <p class="empty-state">No discs match your search/filters.</p>
+      } @else {
+        <p class="empty-state">No discs catalogued yet — scan a shelf or add one manually to get started.</p>
+      }
+
       <!-- Genres & folders -->
       @if (items().length > 0) {
         <div class="browse-card">
@@ -353,49 +396,6 @@ interface ScanRow extends DvdScanCandidate {
             Sign in with Google
           </button>
         </div>
-      }
-
-      <!-- Library grid -->
-      @if (visibleItems().length > 0) {
-        <div class="dvd-grid">
-          @for (item of visibleItems(); track item.id) {
-            <div class="dvd-card">
-              <div class="dvd-poster" [style.background]="item.photoUrl ? null : genreBg(item.genre)" (click)="item.photoUrl ? openLightbox(item) : null">
-                @if (item.photoUrl) {
-                  <img [src]="item.photoUrl" [alt]="item.title" loading="lazy" />
-                } @else {
-                  <span class="dvd-poster-icon">{{ genreMeta(item.genre).icon }}</span>
-                }
-                <span class="dvd-format-badge">{{ formatLabel(item.format) }}</span>
-              </div>
-              <div class="dvd-info">
-                <h3 class="dvd-title">{{ item.title }}{{ item.year ? ' (' + item.year + ')' : '' }}</h3>
-                <div class="dvd-genre-badge" [style.background]="genreBg(item.genre)" [style.color]="genreMeta(item.genre).color">
-                  {{ genreMeta(item.genre).icon }} {{ genreMeta(item.genre).label }}
-                </div>
-                @if (item.director) { <p class="dvd-director">Dir. {{ item.director }}</p> }
-                @if (item.summary) { <p class="dvd-summary">{{ item.summary }}</p> }
-                @if (item.folderId) { <p class="dvd-folder">📁 {{ folderName(item.folderId) }}</p> }
-              </div>
-              @if (auth.canWrite()) {
-                <div class="dvd-actions">
-                  <select class="folder-select" [value]="item.folderId || ''" (change)="moveItem(item, $any($event.target).value)" title="Move to folder">
-                    <option value="">📥 Unfiled</option>
-                    @for (f of customFolders(); track f.id) {
-                      <option [value]="f.id">📁 {{ f.name }}</option>
-                    }
-                  </select>
-                  <button class="action-btn" (click)="startEdit(item)" title="Edit">✏️</button>
-                  <button class="action-btn danger" (click)="confirmDelete(item)" title="Delete">🗑️</button>
-                </div>
-              }
-            </div>
-          }
-        </div>
-      } @else if (items().length > 0) {
-        <p class="empty-state">No discs match your search/filters.</p>
-      } @else {
-        <p class="empty-state">No discs catalogued yet — scan a shelf or add one manually to get started.</p>
       }
 
       <!-- Photo carousel -->
