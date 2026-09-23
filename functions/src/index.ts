@@ -20,7 +20,10 @@ interface PosterOption {
  * Cloud Functions bypass Firestore security rules.
  */
 export const searchDvdPosters = onCall(
-  { secrets: [tmdbAccessToken] },
+  // The function must be publicly invokable at the infrastructure level (Cloud Run) or every
+  // call fails as a 403 before our own code — and our own auth/approval check inside — ever
+  // runs. That in-code check is the real gate; "public" here just means "reachable at all".
+  { secrets: [tmdbAccessToken], invoker: 'public' },
   async (request): Promise<PosterOption[]> => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Sign in required.');

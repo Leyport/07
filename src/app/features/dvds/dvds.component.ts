@@ -1,4 +1,4 @@
-import { Component, inject, signal, computed, OnInit } from '@angular/core';
+import { Component, inject, signal, computed, OnInit, HostListener } from '@angular/core';
 import { DvdsService, DvdInput, DvdScanCandidate, PosterOption } from '../../core/services/dvds.service';
 import { AuthService } from '../../core/services/auth.service';
 import { DVD_GENRES, DvdFolder, DvdFormat, DvdGenre, DvdGenreMeta, DvdItem, CustomDvdGenre } from '../../core/models/dvd-item.model';
@@ -360,7 +360,7 @@ interface ScanRow extends DvdScanCandidate {
         <div class="dvd-grid">
           @for (item of visibleItems(); track item.id) {
             <div class="dvd-card">
-              <div class="dvd-poster" [style.background]="item.photoUrl ? null : genreBg(item.genre)" (click)="item.photoUrl ? lightboxItem.set(item) : null">
+              <div class="dvd-poster" [style.background]="item.photoUrl ? null : genreBg(item.genre)" (click)="item.photoUrl ? openLightbox(item) : null">
                 @if (item.photoUrl) {
                   <img [src]="item.photoUrl" [alt]="item.title" loading="lazy" />
                 } @else {
@@ -398,16 +398,30 @@ interface ScanRow extends DvdScanCandidate {
         <p class="empty-state">No discs catalogued yet — scan a shelf or add one manually to get started.</p>
       }
 
-      <!-- Photo lightbox -->
-      @if (lightboxItem()) {
-        <div class="lightbox" (click)="lightboxItem.set(null)">
-          <div class="lightbox-content" (click)="$event.stopPropagation()">
-            <button class="lightbox-close" (click)="lightboxItem.set(null)">✕</button>
-            <img [src]="lightboxItem()!.photoUrl" [alt]="lightboxItem()!.title" />
-            <div class="lightbox-caption">
-              <h3>{{ lightboxItem()!.title }}</h3>
+      <!-- Photo carousel -->
+      @if (lightboxIndex() !== null) {
+        <div class="carousel-backdrop"
+             (click)="closeLightbox()"
+             (touchstart)="onTouchStart($event)"
+             (touchend)="onTouchEnd($event)">
+
+          @if (lightboxIndex()! > 0) {
+            <button class="carousel-nav carousel-prev" (click)="$event.stopPropagation(); prevItem()">&#8249;</button>
+          }
+
+          <div class="carousel-content" (click)="$event.stopPropagation()">
+            <div class="carousel-header">
+              <span class="carousel-counter">{{ lightboxIndex()! + 1 }} / {{ carouselItems().length }}</span>
+              <button class="carousel-close" (click)="closeLightbox()">✕</button>
             </div>
+            <img class="carousel-media" [src]="lightboxItem()!.photoUrl" [alt]="lightboxItem()!.title" />
+            <div class="carousel-caption">{{ lightboxItem()!.title }}{{ lightboxItem()!.year ? ' (' + lightboxItem()!.year + ')' : '' }}</div>
           </div>
+
+          @if (lightboxIndex()! < carouselItems().length - 1) {
+            <button class="carousel-nav carousel-next" (click)="$event.stopPropagation(); nextItem()">&#8250;</button>
+          }
+
         </div>
       }
 
@@ -735,20 +749,42 @@ interface ScanRow extends DvdScanCandidate {
     .action-btn:hover { background: var(--hover); }
     .action-btn.danger:hover { background: #fee2e2; }
 
-    /* Lightbox */
+    /* Lightbox (delete confirm) */
     .lightbox {
       position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex;
       align-items: center; justify-content: center; z-index: 1000; padding: 1rem;
     }
-    .lightbox-content { position: relative; max-width: 90vw; max-height: 90vh; background: var(--surface); border-radius: 16px; overflow: hidden; }
-    .lightbox-content img { max-width: 90vw; max-height: 75vh; display: block; }
-    .lightbox-close {
-      position: absolute; top: 0.75rem; right: 0.75rem; background: rgba(0,0,0,0.5); color: white;
-      border: none; width: 32px; height: 32px; border-radius: 50%; font-size: 1rem; cursor: pointer;
-      z-index: 10; display: flex; align-items: center; justify-content: center;
+
+    /* Photo carousel */
+    .carousel-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.92); display: flex;
+      align-items: center; justify-content: center; z-index: 1000; touch-action: pan-y;
     }
-    .lightbox-caption { padding: 1rem 1.25rem; }
-    .lightbox-caption h3 { margin: 0; font-size: 1rem; color: var(--text-primary); }
+    .carousel-content { position: relative; max-width: min(92vw, 700px); max-height: 92vh; display: flex; flex-direction: column; align-items: center; }
+    .carousel-header { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 0 0 0.5rem; }
+    .carousel-counter { font-size: 0.85rem; color: rgba(255,255,255,0.6); font-variant-numeric: tabular-nums; }
+    .carousel-close {
+      background: rgba(255,255,255,0.15); color: white; border: none; width: 32px; height: 32px;
+      border-radius: 50%; font-size: 1rem; cursor: pointer; display: flex; align-items: center;
+      justify-content: center; transition: background 0.2s;
+    }
+    .carousel-close:hover { background: rgba(255,255,255,0.3); }
+    .carousel-media { display: block; max-width: min(92vw, 700px); max-height: 78vh; object-fit: contain; border-radius: 8px; }
+    .carousel-caption { margin-top: 0.75rem; font-size: 0.9rem; color: rgba(255,255,255,0.75); text-align: center; max-width: 560px; }
+    .carousel-nav {
+      position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.15);
+      color: white; border: none; width: 44px; height: 44px; border-radius: 50%; font-size: 1.75rem;
+      line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s; z-index: 10; flex-shrink: 0;
+    }
+    .carousel-nav:hover { background: rgba(255,255,255,0.3); }
+    .carousel-prev { left: 1rem; }
+    .carousel-next { right: 1rem; }
+    @media (max-width: 600px) {
+      .carousel-nav { width: 36px; height: 36px; font-size: 1.4rem; }
+      .carousel-prev { left: 0.25rem; }
+      .carousel-next { right: 0.25rem; }
+    }
 
     .confirm-dialog { background: var(--surface); border-radius: 16px; padding: 2rem; max-width: 360px; width: 100%; text-align: center; }
     .confirm-dialog h3 { margin: 0 0 0.5rem; font-size: 1.1rem; color: var(--text-primary); }
@@ -1007,7 +1043,54 @@ export class DvdsComponent implements OnInit {
   editingId = signal<string | null>(null);
   selectedFile = signal<File | null>(null);
   deletingItem = signal<DvdItem | null>(null);
-  lightboxItem = signal<DvdItem | null>(null);
+
+  lightboxIndex = signal<number | null>(null);
+  /** Only discs with a photo — that's what the carousel has anything to show for. */
+  carouselItems = computed(() => this.visibleItems().filter(i => i.photoUrl));
+  lightboxItem = computed(() => {
+    const i = this.lightboxIndex();
+    return i !== null ? this.carouselItems()[i] ?? null : null;
+  });
+  private touchStartX = 0;
+  private touchStartY = 0;
+
+  @HostListener('document:keydown', ['$event'])
+  onKeyDown(e: KeyboardEvent) {
+    if (this.lightboxIndex() === null) return;
+    if (e.key === 'ArrowRight') this.nextItem();
+    if (e.key === 'ArrowLeft') this.prevItem();
+    if (e.key === 'Escape') this.closeLightbox();
+  }
+
+  openLightbox(item: DvdItem) {
+    const i = this.carouselItems().indexOf(item);
+    if (i !== -1) this.lightboxIndex.set(i);
+  }
+
+  closeLightbox() { this.lightboxIndex.set(null); }
+
+  nextItem() {
+    const i = this.lightboxIndex();
+    if (i !== null && i < this.carouselItems().length - 1) this.lightboxIndex.set(i + 1);
+  }
+
+  prevItem() {
+    const i = this.lightboxIndex();
+    if (i !== null && i > 0) this.lightboxIndex.set(i - 1);
+  }
+
+  onTouchStart(e: TouchEvent) {
+    this.touchStartX = e.touches[0].clientX;
+    this.touchStartY = e.touches[0].clientY;
+  }
+
+  onTouchEnd(e: TouchEvent) {
+    const dx = e.changedTouches[0].clientX - this.touchStartX;
+    const dy = e.changedTouches[0].clientY - this.touchStartY;
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
+      dx < 0 ? this.nextItem() : this.prevItem();
+    }
+  }
 
   editingPhotoUrl = signal<string | undefined>(undefined);
   editingPhotoPath = signal<string | null>(null);
