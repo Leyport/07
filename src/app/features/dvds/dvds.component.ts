@@ -207,6 +207,9 @@ interface ScanRow extends DvdScanCandidate {
                     </div>
                   }
                 </div>
+                @if (dvdsService.scanError()) {
+                  <p class="error-banner">⚠️ {{ dvdsService.scanError() }}</p>
+                }
                 <div class="form-actions">
                   <button class="btn-secondary" (click)="cancelScan()">Discard all</button>
                   <button class="btn-primary" (click)="saveScanResults()" [disabled]="scanSaving()">
@@ -574,6 +577,13 @@ interface ScanRow extends DvdScanCandidate {
     .progress-fill { height: 100%; background: #dc2626; border-radius: 3px; transition: width 0.3s; }
     .progress-text { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 1rem; }
     .error-text { color: #ef4444; font-size: 0.85rem; margin: 0 0 1rem; }
+    .error-banner {
+      background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 8px;
+      padding: 0.75rem 1rem; font-size: 0.88rem; font-weight: 600; margin: 0 0 1rem;
+    }
+    @media (prefers-color-scheme: dark) {
+      .error-banner { background: color-mix(in srgb, #ef4444 20%, var(--bg)); color: #fca5a5; border-color: color-mix(in srgb, #ef4444 40%, var(--bg)); }
+    }
 
     .form-actions { display: flex; gap: 0.75rem; justify-content: flex-end; }
     .btn-primary {
@@ -900,6 +910,7 @@ export class DvdsComponent implements OnInit {
       this.cancelScan();
     } catch (err: any) {
       this.dvdsService.scanError.set(err.message || 'Something went wrong saving those discs.');
+      setTimeout(() => document.querySelector('.error-banner')?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
     } finally {
       this.scanSaving.set(false);
     }
