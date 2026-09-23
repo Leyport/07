@@ -69,7 +69,19 @@ The DVD Library section uses Gemini to identify films from a photo of the disc(s
 
 Everything else in the DVD Library (browsing, search, manual entry) works without any of this — it's only needed for the AI photo-scan step.
 
-### Step 7 — Run the app
+### Step 7 — Deploy the poster-lookup Cloud Function (for "Find posters online")
+The DVD Library's poster picker looks up official cover art on [TMDb](https://www.themoviedb.org). TMDb's access token is a real credential (unlike the values above, which are designed to be public), so it's kept server-side in a small Cloud Function rather than in any source file:
+1. Get a free TMDb key: sign up at themoviedb.org → **Settings → API** → request a key ("Developer" is fine) → copy the **API Read Access Token** (the long one, not the short API key).
+2. Install the function's dependencies: `cd functions && npm install && cd ..`
+3. Store the token in Secret Manager (never paste it into a file) — run this yourself in a terminal, since it prompts interactively for the value:
+   ```bash
+   firebase functions:secrets:set TMDB_ACCESS_TOKEN --project YOUR_PROJECT_ID
+   ```
+4. Deploy the function: `firebase deploy --only functions --project YOUR_PROJECT_ID`
+
+Everything else in the DVD Library works without this too — it's only needed for the online poster picker specifically (your own photos and the AI scan's cropped thumbnails don't need it).
+
+### Step 8 — Run the app
 ```bash
 ng serve
 ```

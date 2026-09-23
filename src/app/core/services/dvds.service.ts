@@ -291,32 +291,17 @@ export class DvdsService {
 
   /**
    * Looks up a film on TMDb by title (+ year, if known) and returns its available poster
-   * artwork as thumbnail-sized image URLs, best-rated first, for a "pick one" grid. Hotlinks
-   * TMDb's own image CDN rather than downloading/re-hosting — that's what it's there for.
+   * artwork as thumbnail-sized image URLs, best-rated first, for a "pick one" grid. Goes
+   * through the `searchDvdPosters` Cloud Function rather than calling TMDb directly — that's
+   * where the TMDb access token actually lives (Secret Manager), never in client code.
    */
   async searchPosters(title: string, year?: number): Promise<PosterOption[]> {
-    const headers = { Authorization: `Bearer ${environment.tmdbAccessToken}`, accept: 'application/json' };
-
-    const searchUrl = new URL('https://api.themoviedb.org/3/search/movie');
-    searchUrl.searchParams.set('query', title);
-    if (year) searchUrl.searchParams.set('year', String(year));
-
-    const searchRes = await fetch(searchUrl, { headers });
-    if (!searchRes.ok) throw new Error(`TMDb search failed (${searchRes.status}).`);
-    const searchData = await searchRes.json();
-    const match = searchData.results?.[0];
-    if (!match) return [];
-
-    const imagesRes = await fetch(`https://api.themoviedb.org/3/movie/${match.id}/images`, { headers });
-    if (!imagesRes.ok) throw new Error(`TMDb images lookup failed (${imagesRes.status}).`);
-    const imagesData = await imagesRes.json();
-
-    const posters = (imagesData.posters ?? []) as { file_path: string; vote_average: number; iso_639_1: string | null }[];
-    return posters
-      .filter(p => p.iso_639_1 === 'en' || p.iso_639_1 === null)
-      .sort((a, b) => b.vote_average - a.vote_average)
-      .slice(0, 6)
-      .map(p => ({ url: `https://image.tmdb.org/t/p/w342${p.file_path}` }));
+    const { getFunctions, httpsCallable } = await import('firebase/functions');
+    const call = httpsCallable<{ title: string; year?: number }, PosterOption[]>(
+      getFunctions(this.app), 'searchDvdPosters'
+    );
+    const result = await call({ title, year });
+    return result.data;
   }
 
   /**
