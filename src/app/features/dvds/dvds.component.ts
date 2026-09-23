@@ -35,6 +35,16 @@ interface ScanRow extends DvdScanCandidate {
         }
       </div>
 
+      <!-- Sort -->
+      <div class="sort-bar">
+        <span class="sort-label">Sort by</span>
+        <select [value]="sortBy()" (change)="sortBy.set($any($event.target).value)" class="sort-select">
+          <option value="added">Recently added</option>
+          <option value="year">Release year (newest first)</option>
+          <option value="title">Title (A–Z)</option>
+        </select>
+      </div>
+
       <!-- Library grid -->
       @if (visibleItems().length > 0) {
         <div class="dvd-grid">
@@ -465,7 +475,7 @@ interface ScanRow extends DvdScanCandidate {
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 0.65rem 1rem;
-      margin-bottom: 1.5rem;
+      margin-bottom: 0.75rem;
     }
     .search-icon { flex-shrink: 0; }
     .search-input {
@@ -479,6 +489,15 @@ interface ScanRow extends DvdScanCandidate {
     }
     .search-clear { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 0.85rem; padding: 0.2rem; }
     .search-clear:hover { color: var(--text-primary); }
+
+    .sort-bar { display: flex; align-items: center; gap: 0.6rem; margin: 0 0 1.5rem; }
+    .sort-label { font-size: 0.82rem; color: var(--text-muted); }
+    .sort-select {
+      padding: 0.4rem 0.6rem; border: 1px solid var(--border); border-radius: 8px;
+      background: var(--surface); color: var(--text-primary); font-size: 0.85rem;
+      font-family: inherit; cursor: pointer;
+    }
+    .sort-select:focus { outline: none; border-color: #dc2626; }
 
     /* Browse (genres/folders) */
     .browse-card {
@@ -823,6 +842,7 @@ export class DvdsComponent implements OnInit {
   searchQuery = signal('');
   selectedGenre = signal<DvdGenre | null>(null);
   selectedFolderId = signal<string | 'unfiled' | null>(null);
+  sortBy = signal<'added' | 'year' | 'title'>('added');
 
   visibleItems = computed(() => {
     let list = this.items();
@@ -835,6 +855,15 @@ export class DvdsComponent implements OnInit {
     const folder = this.selectedFolderId();
     if (folder === 'unfiled') list = list.filter(i => !i.folderId);
     else if (folder) list = list.filter(i => i.folderId === folder);
+
+    const sort = this.sortBy();
+    if (sort === 'title') {
+      list = [...list].sort((a, b) => a.title.localeCompare(b.title));
+    } else if (sort === 'year') {
+      // Discs with no known year sort to the end regardless of direction.
+      list = [...list].sort((a, b) => (b.year ?? -Infinity) - (a.year ?? -Infinity));
+    }
+    // 'added' needs no re-sort — items() is already newest-added-first from the Firestore query.
 
     return list;
   });
