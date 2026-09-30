@@ -42,6 +42,7 @@ interface ScanRow extends DvdScanCandidate {
           <option value="added">Recently added</option>
           <option value="year">Release year (newest first)</option>
           <option value="title">Title (A–Z)</option>
+          <option value="poster">No poster first</option>
         </select>
       </div>
 
@@ -50,7 +51,9 @@ interface ScanRow extends DvdScanCandidate {
         <div class="dvd-grid">
           @for (item of visibleItems(); track item.id) {
             <div class="dvd-card">
-              <div class="dvd-poster" [style.background]="item.photoUrl ? null : genreBg(item.genre)" (click)="item.photoUrl ? openLightbox(item) : null">
+              <div class="dvd-poster" [class.clickable]="auth.canWrite() || item.photoUrl"
+                [style.background]="item.photoUrl ? null : genreBg(item.genre)"
+                [title]="auth.canWrite() ? 'Click to edit' : ''" (click)="onPosterClick(item)">
                 @if (item.photoUrl) {
                   <img [src]="item.photoUrl" [alt]="item.title" loading="lazy" />
                 } @else {
@@ -742,7 +745,8 @@ interface ScanRow extends DvdScanCandidate {
       justify-content: center;
       background: var(--hover);
     }
-    .dvd-poster img { width: 100%; height: 100%; object-fit: cover; display: block; cursor: pointer; }
+    .dvd-poster.clickable { cursor: pointer; }
+    .dvd-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .dvd-poster-icon { font-size: 2.5rem; }
     .dvd-format-badge {
       position: absolute; bottom: 6px; right: 6px; background: rgba(0,0,0,0.65); color: white;
@@ -842,7 +846,7 @@ export class DvdsComponent implements OnInit {
   searchQuery = signal('');
   selectedGenre = signal<DvdGenre | null>(null);
   selectedFolderId = signal<string | 'unfiled' | null>(null);
-  sortBy = signal<'added' | 'year' | 'title'>('added');
+  sortBy = signal<'added' | 'year' | 'title' | 'poster'>('added');
 
   visibleItems = computed(() => {
     let list = this.items();
@@ -862,6 +866,9 @@ export class DvdsComponent implements OnInit {
     } else if (sort === 'year') {
       // Discs with no known year sort to the end regardless of direction.
       list = [...list].sort((a, b) => (b.year ?? -Infinity) - (a.year ?? -Infinity));
+    } else if (sort === 'poster') {
+      // Stable sort, so each group keeps its newest-added-first order.
+      list = [...list].sort((a, b) => Number(!!a.photoUrl) - Number(!!b.photoUrl));
     }
     // 'added' needs no re-sort — items() is already newest-added-first from the Firestore query.
 
@@ -1096,6 +1103,12 @@ export class DvdsComponent implements OnInit {
   openLightbox(item: DvdItem) {
     const i = this.carouselItems().indexOf(item);
     if (i !== -1) this.lightboxIndex.set(i);
+  }
+
+  /** Editors go straight to the edit form; everyone else gets the carousel (if there's a photo). */
+  onPosterClick(item: DvdItem) {
+    if (this.auth.canWrite()) this.startEdit(item);
+    else if (item.photoUrl) this.openLightbox(item);
   }
 
   closeLightbox() { this.lightboxIndex.set(null); }
