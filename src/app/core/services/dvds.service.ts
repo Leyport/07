@@ -231,8 +231,9 @@ export class DvdsService {
     await updateDoc(doc(this.db, 'dvds', dvdId), { folderId });
   }
 
-  async deleteDvd(item: DvdItem): Promise<void> {
-    if (item.photoPath) {
+  /** Pass keepPhoto when another disc still references the same stored photo. */
+  async deleteDvd(item: DvdItem, keepPhoto = false): Promise<void> {
+    if (item.photoPath && !keepPhoto) {
       await deleteObject(ref(this.storage, item.photoPath)).catch(() => {});
     }
     await deleteDoc(doc(this.db, 'dvds', item.id));

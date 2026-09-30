@@ -44,7 +44,57 @@ interface ScanRow extends DvdScanCandidate {
           <option value="title">Title (A–Z)</option>
           <option value="poster">No poster first</option>
         </select>
+        @if (auth.canWrite() && duplicateGroups().length > 0) {
+          <button type="button" class="manage-link dupe-toggle" (click)="showDupes.set(!showDupes())">
+            🧹 {{ duplicateGroups().length }} possible duplicate{{ duplicateGroups().length !== 1 ? 's' : '' }}
+          </button>
+        }
       </div>
+
+      <!-- Duplicates -->
+      @if (showDupes() && auth.canWrite()) {
+        <div class="browse-card">
+          <div class="browse-header">
+            <h2 class="section-heading browse-heading">🧹 Possible duplicates</h2>
+            <button type="button" class="manage-link" (click)="showDupes.set(false)">Done</button>
+          </div>
+          @if (duplicateGroups().length === 0) {
+            <p class="hint-text">No duplicates left — every title appears once.</p>
+          } @else {
+            <p class="hint-text">Discs with the same title (ignoring case, punctuation and a leading "The"). Pick the one to keep — ⭐ marks the most complete.</p>
+            @if (dedupeError()) { <p class="error-text">{{ dedupeError() }}</p> }
+            @for (group of duplicateGroups(); track group.key) {
+              <div class="manager">
+                @for (item of group.items; track item.id) {
+                  <div class="current-photo dupe-item">
+                    @if (item.photoUrl) {
+                      <img [src]="item.photoUrl" [alt]="item.title" />
+                    } @else {
+                      <span class="dupe-icon" [style.background]="genreBg(item.genre)">{{ genreMeta(item.genre).icon }}</span>
+                    }
+                    <span class="dupe-meta">
+                      <strong>{{ item.id === group.suggestedKeepId ? '⭐ ' : '' }}{{ item.title }}{{ item.year ? ' (' + item.year + ')' : '' }}</strong><br />
+                      {{ formatLabel(item.format) }} · {{ genreMeta(item.genre).label }}{{ item.folderId ? ' · 📁 ' + folderName(item.folderId) : '' }}
+                      · {{ item.photoUrl ? 'poster' : 'no poster' }}{{ item.summary ? ', summary' : '' }}<br />
+                      Added {{ item.addedAt.toLocaleDateString() }}{{ item.addedBy ? ' by ' + item.addedBy : '' }}
+                    </span>
+                    @if (confirmingKeepId() === item.id) {
+                      <span class="dupe-actions">
+                        <button type="button" class="btn-small btn-delete" (click)="keepOnly(group.items, item)" [disabled]="dedupeBusy()">
+                          {{ dedupeBusy() ? 'Deleting…' : 'Delete other ' + (group.items.length - 1) }}
+                        </button>
+                        <button type="button" class="btn-small btn-cancel" (click)="confirmingKeepId.set(null)">Cancel</button>
+                      </span>
+                    } @else {
+                      <button type="button" class="btn-small" (click)="confirmingKeepId.set(item.id)">Keep this one</button>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          }
+        </div>
+      }
 
       <!-- Library grid -->
       @if (visibleItems().length > 0) {
@@ -251,6 +301,9 @@ interface ScanRow extends DvdScanCandidate {
                       <div class="scan-row-fields">
                         <input [value]="row.title" (input)="updateScanRow(row.rowId, { title: $any($event.target).value })"
                           type="text" placeholder="Title" class="form-input" />
+                        @if (scanRowDuplicateOf(row); as dupe) {
+                          <p class="dupe-warning">⚠️ {{ dupe }}</p>
+                        }
                         <div class="form-row">
                           <input [value]="row.year ?? ''" (input)="updateScanRow(row.rowId, { year: $any($event.target).value ? +$any($event.target).value : undefined })"
                             type="number" placeholder="Year" class="form-input scan-year" />
@@ -293,6 +346,9 @@ interface ScanRow extends DvdScanCandidate {
               <div class="form-group">
                 <label>Title</label>
                 <input [value]="title()" (input)="title.set($any($event.target).value)" type="text" placeholder="e.g. The Princess Bride" class="form-input" />
+                @if (libraryMatch(title(), editingId()); as dupe) {
+                  <p class="dupe-warning">⚠️ Already in the library: {{ describe(dupe) }}</p>
+                }
               </div>
 
               <div class="form-row">
@@ -501,6 +557,14 @@ interface ScanRow extends DvdScanCandidate {
       font-family: inherit; cursor: pointer;
     }
     .sort-select:focus { outline: none; border-color: #dc2626; }
+    .dupe-toggle { margin-left: auto; }
+    .dupe-warning { font-size: 0.8rem; font-weight: 600; color: #d97706; margin: 0.35rem 0 0; }
+    .dupe-item { margin: 0.4rem 0; }
+    .dupe-icon { width: 44px; aspect-ratio: 2 / 3; flex-shrink: 0; border-radius: 4px; display: flex; align-items: center; justify-content: center; }
+    .dupe-meta { flex: 1; line-height: 1.5; }
+    .dupe-meta strong { color: var(--text-primary); }
+    .dupe-actions { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+    .btn-small.btn-delete { background: #ef4444; border-color: #ef4444; color: white; }
 
     /* Browse (genres/folders) */
     .browse-card {
@@ -874,6 +938,77 @@ export class DvdsComponent implements OnInit {
 
     return list;
   });
+
+  // Duplicate finder
+  showDupes = signal(false);
+  confirmingKeepId = signal<string | null>(null);
+  dedupeBusy = signal(false);
+  dedupeError = signal('');
+
+  /** Titles compared loosely: case, accents, punctuation, "&"/"and" and a leading "The" don't matter. */
+  private normalizeTitle(title: string): string {
+    return title.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim().replace(/^the /, '');
+  }
+
+  /** How filled-in a disc is — used to suggest which copy of a duplicate to keep. */
+  private completeness(item: DvdItem): number {
+    return (item.photoUrl ? 4 : 0) + (item.summary ? 2 : 0) + (item.director ? 1 : 0)
+      + (item.year ? 1 : 0) + (item.folderId ? 1 : 0);
+  }
+
+  duplicateGroups = computed(() => {
+    const groups = new Map<string, DvdItem[]>();
+    for (const item of this.items()) {
+      const key = this.normalizeTitle(item.title);
+      if (key) groups.set(key, [...(groups.get(key) ?? []), item]);
+    }
+    return [...groups.entries()]
+      .filter(([, items]) => items.length > 1)
+      .map(([key, items]) => {
+        // Most complete first; ties go to the oldest (lowest order = added earliest).
+        const sorted = [...items].sort((a, b) => this.completeness(b) - this.completeness(a) || a.order - b.order);
+        return { key, items: sorted, suggestedKeepId: sorted[0].id };
+      })
+      .sort((a, b) => a.items[0].title.localeCompare(b.items[0].title));
+  });
+
+  /** A disc already in the library with the same (loosely compared) title, other than the one being edited. */
+  libraryMatch(title: string, excludeId: string | null = null): DvdItem | undefined {
+    const key = this.normalizeTitle(title);
+    return key ? this.items().find(i => i.id !== excludeId && this.normalizeTitle(i.title) === key) : undefined;
+  }
+
+  describe(item: DvdItem): string {
+    return `${item.title}${item.year ? ' (' + item.year + ')' : ''} — ${this.formatLabel(item.format)}`;
+  }
+
+  /** Warning text for a scan row that's already in the library, or repeats an earlier row in this scan. */
+  scanRowDuplicateOf(row: ScanRow): string | null {
+    const inLibrary = this.libraryMatch(row.title);
+    if (inLibrary) return `Already in the library: ${this.describe(inLibrary)}`;
+    const key = this.normalizeTitle(row.title);
+    const rows = this.scanResults();
+    const earlier = rows.slice(0, rows.findIndex(r => r.rowId === row.rowId));
+    return key && earlier.some(r => this.normalizeTitle(r.title) === key) ? 'Also found earlier in this scan' : null;
+  }
+
+  async keepOnly(group: DvdItem[], keep: DvdItem) {
+    this.dedupeBusy.set(true);
+    this.dedupeError.set('');
+    try {
+      for (const item of group) {
+        if (item.id === keep.id) continue;
+        // Don't delete a stored photo the kept disc is still pointing at.
+        await this.dvdsService.deleteDvd(item, item.photoPath === keep.photoPath);
+      }
+      this.confirmingKeepId.set(null);
+    } catch (err: any) {
+      this.dedupeError.set(err.message || 'Something went wrong deleting duplicates.');
+    } finally {
+      this.dedupeBusy.set(false);
+    }
+  }
 
   genreCounts = computed(() => {
     const counts = new Map<string, number>();
