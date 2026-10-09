@@ -58,4 +58,18 @@ export interface DvdItem {
   addedAt: Date;
   addedBy?: string;
   order: number;
+  /** Who watched it and what they thought — one entry per person per viewing. */
+  viewings?: DvdViewing[];
+}
+
+export interface DvdViewing {
+  id: string;
+  /** Local calendar date, 'YYYY-MM-DD'. */
+  date: string;
+  watchedBy: string;
+  /** 1–5 stars. */
+  rating: number;
+  watchAgain: boolean;
+  notes?: string;
+  addedBy?: string;
 }

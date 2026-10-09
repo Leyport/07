@@ -2,6 +2,7 @@ import { Component, inject, signal, computed, OnInit, HostListener } from '@angu
 import { DvdsService, DvdInput, DvdScanCandidate, PosterOption } from '../../core/services/dvds.service';
 import { AuthService } from '../../core/services/auth.service';
 import { DVD_GENRES, DvdFolder, DvdFormat, DvdGenre, DvdGenreMeta, DvdItem, CustomDvdGenre } from '../../core/models/dvd-item.model';
+import { DvdViewingsComponent } from './dvd-viewings.component';
 
 /** A scan result awaiting user review, with a local id so it can be edited/removed before saving. */
 interface ScanRow extends DvdScanCandidate {
@@ -13,7 +14,7 @@ interface ScanRow extends DvdScanCandidate {
 @Component({
   selector: 'app-dvds',
   standalone: true,
-  imports: [],
+  imports: [DvdViewingsComponent],
   template: `
     <div class="dvds-page">
 
@@ -75,7 +76,7 @@ interface ScanRow extends DvdScanCandidate {
                     <span class="dupe-meta">
                       <strong>{{ item.id === group.suggestedKeepId ? '⭐ ' : '' }}{{ item.title }}{{ item.year ? ' (' + item.year + ')' : '' }}</strong><br />
                       {{ formatLabel(item.format) }} · {{ genreMeta(item.genre).label }}{{ item.folderId ? ' · 📁 ' + folderName(item.folderId) : '' }}
-                      · {{ item.photoUrl ? 'poster' : 'no poster' }}{{ item.summary ? ', summary' : '' }}<br />
+                      · {{ item.photoUrl ? 'poster' : 'no poster' }}{{ item.summary ? ', summary' : '' }}{{ item.viewings?.length ? ', ' + item.viewings!.length + ' viewing(s)' : '' }}<br />
                       Added {{ item.addedAt.toLocaleDateString() }}{{ item.addedBy ? ' by ' + item.addedBy : '' }}
                     </span>
                     @if (confirmingKeepId() === item.id) {
@@ -119,6 +120,13 @@ interface ScanRow extends DvdScanCandidate {
                 @if (item.director) { <p class="dvd-director">Dir. {{ item.director }}</p> }
                 @if (item.summary) { <p class="dvd-summary">{{ item.summary }}</p> }
                 @if (item.folderId) { <p class="dvd-folder">📁 {{ folderName(item.folderId) }}</p> }
+                @if (item.viewings?.length) {
+                  <button type="button" class="viewings-link" (click)="viewingsForId.set(item.id)">
+                    👁 {{ item.viewings!.length }} viewing{{ item.viewings!.length !== 1 ? 's' : '' }} · ★ {{ averageRating(item) }}
+                  </button>
+                } @else if (auth.canWrite()) {
+                  <button type="button" class="viewings-link" (click)="viewingsForId.set(item.id)">＋ Log a viewing</button>
+                }
               </div>
               @if (auth.canWrite()) {
                 <div class="dvd-actions">
@@ -495,6 +503,11 @@ interface ScanRow extends DvdScanCandidate {
         </div>
       }
 
+      <!-- Viewing log -->
+      @if (viewingsItem(); as vi) {
+        <app-dvd-viewings [item]="vi" [knownNames]="knownViewerNames()" (closed)="viewingsForId.set(null)" />
+      }
+
       <!-- Delete confirm -->
       @if (deletingItem()) {
         <div class="lightbox" (click)="deletingItem.set(null)">
@@ -827,6 +840,11 @@ interface ScanRow extends DvdScanCandidate {
       display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
     }
     .dvd-folder { font-size: 0.72rem; color: var(--text-muted); margin: 0; }
+    .viewings-link {
+      align-self: flex-start; margin-top: auto; background: none; border: none; padding: 0.15rem 0;
+      font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); cursor: pointer;
+    }
+    .viewings-link:hover { color: #dc2626; }
 
     .dvd-actions { display: flex; align-items: center; gap: 0.15rem; padding: 0 0.85rem 0.85rem; }
     .folder-select {
@@ -939,6 +957,18 @@ export class DvdsComponent implements OnInit {
     return list;
   });
 
+  // Viewing log
+  viewingsForId = signal<string | null>(null);
+  /** Looked up from items() so the open dialog updates live as viewings are saved. */
+  viewingsItem = computed(() => this.items().find(i => i.id === this.viewingsForId()) ?? null);
+  knownViewerNames = computed(() =>
+    [...new Set(this.items().flatMap(i => (i.viewings ?? []).map(v => v.watchedBy)))].sort((a, b) => a.localeCompare(b)));
+
+  averageRating(item: DvdItem): string {
+    const v = item.viewings ?? [];
+    return v.length ? (v.reduce((sum, x) => sum + x.rating, 0) / v.length).toFixed(1) : '';
+  }
+
   // Duplicate finder
   showDupes = signal(false);
   confirmingKeepId = signal<string | null>(null);
@@ -997,8 +1027,13 @@ export class DvdsComponent implements OnInit {
     this.dedupeBusy.set(true);
     this.dedupeError.set('');
     try {
-      for (const item of group) {
-        if (item.id === keep.id) continue;
+      // Carry any viewings logged against the copies being deleted over to the one being kept.
+      const others = group.filter(i => i.id !== keep.id);
+      const movedViewings = others.flatMap(i => i.viewings ?? []);
+      if (movedViewings.length) {
+        await this.dvdsService.setViewings(keep.id, [...(keep.viewings ?? []), ...movedViewings]);
+      }
+      for (const item of others) {
         // Don't delete a stored photo the kept disc is still pointing at.
         await this.dvdsService.deleteDvd(item, item.photoPath === keep.photoPath);
       }

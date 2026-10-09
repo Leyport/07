@@ -9,7 +9,7 @@ import {
   getDownloadURL, deleteObject, FirebaseStorage
 } from 'firebase/storage';
 import { Observable } from 'rxjs';
-import { CustomDvdGenre, DvdFolder, DvdFormat, DvdGenre, DvdItem, DVD_GENRES } from '../models/dvd-item.model';
+import { CustomDvdGenre, DvdFolder, DvdFormat, DvdGenre, DvdItem, DvdViewing, DVD_GENRES } from '../models/dvd-item.model';
 import { environment } from '../../../environments/environment';
 
 export interface DvdUploadProgress {
@@ -225,6 +225,11 @@ export class DvdsService {
       await deleteObject(ref(this.storage, oldPhotoPath)).catch(() => {});
     }
     await updateDoc(doc(this.db, 'dvds', id), { photoUrl, photoPath: deleteField() });
+  }
+
+  /** Replaces a disc's whole viewing log (add/edit/delete all rewrite the array). */
+  async setViewings(dvdId: string, viewings: DvdViewing[]): Promise<void> {
+    await updateDoc(doc(this.db, 'dvds', dvdId), { viewings });
   }
 
   async moveToFolder(dvdId: string, folderId: string | null): Promise<void> {
